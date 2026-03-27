@@ -1,0 +1,11 @@
+# Prometheus configuration
+global:
+  scrape_interval: 15s  # Scrape targets every 15 seconds
+  evaluation_interval: 15s
+
+scrape_configs:
+  - job_name: 'intellectual-contribution-system'
+    static_configs:
+      - targets: ['contribution_backend:8080']
+    metrics_path: '/metrics'
+    scrape_interval: 5s  # Scrape backend every 5 seconds for faster updates

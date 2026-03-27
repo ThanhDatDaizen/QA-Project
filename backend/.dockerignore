@@ -1,0 +1,10 @@
+target/
+.git
+.gitignore
+README.md
+*.swp
+*.swo
+*~
+.DS_Store
+.env.local
+*.log

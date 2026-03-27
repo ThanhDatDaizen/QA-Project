@@ -1,0 +1,27 @@
+# --- Rust specific ---
+**/target/
+target/
+intellectual-contribution-system/backend/target/
+
+# --- Environment & Secrets (QUAN TRỌNG) ---
+.env*
+!.env_fortesting
+
+# --- Editor/OS specific ---
+*.swp
+*.swo
+*~
+.vscode/
+.idea/
+
+# --- Frontend/Web ---
+node_modules/
+dist/
+*.log
+
+
+*.pdb
+*.exe
+*.rlib
+debug/
+release/
