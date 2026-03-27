@@ -1,1 +1,3 @@
 backend : noting...
+
+# Idea Management System [![Rust CI](https://github.com/ThanhDatDaizen/QA-Project/actions/workflows/ci.yml/badge.svg)](https://github.com/ThanhDatDaizen/QA-Project/actions/workflows/ci.yml)
