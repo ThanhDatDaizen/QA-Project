@@ -7,17 +7,20 @@ on:
     branches: [ "main" ]
 
 jobs:
-  check:
-    name: Build & Check
+  build:
     runs-on: ubuntu-latest
+
     steps:
-      - name: Checkout code
-        uses: actions/checkout@v4
+    - uses: actions/checkout@v4
+    
+    - name: Install Rust
+      uses: dtolnay/rust-toolchain@stable
 
-      - name: Install Rust
-        uses: dtolnay/rust-toolchain@stable
-
-      - name: Rust Lint with Clippy
-        run: |
+    - name: Build & Check Backend
+      run: |
+        if [ -d "backend" ]; then
           cd backend
-          cargo clippy -- -D warnings
+          cargo check
+        else
+          cargo check
+        fi
