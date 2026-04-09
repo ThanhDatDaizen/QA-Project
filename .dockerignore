@@ -1,0 +1,64 @@
+# =====================================================
+# .dockerignore - Tú giảm dung lượng Docker build context
+# Loại bỏ files không cần thiết khi build image
+# =====================================================
+
+# Build outputs (nhưng GIỮU dist/ vì Docker build cần tạo nó)
+node_modules/
+target/
+build/
+out/
+
+# Version control
+.git
+.gitignore
+.github
+
+# IDE & Editor
+.vscode
+.idea
+*.swp
+*.swo
+*~
+.sublime-project
+.sublime-workspace
+*.sublime-*
+
+# Environment files (nhưng GIỮU .env)
+.env.local
+.env.*.local
+.env.development
+.env.test
+
+# Documentation (exclude raw docs, nhưng GIỮU docker-compose.yml, nginx.conf, Dockerfile, .env)
+docs/
+
+# Package managers logfiles (nhưng GIỮU package-lock.json!)
+npm-debug.log
+yarn-error.log
+
+# OS files
+.DS_Store
+Thumbs.db
+.AppleDouble
+.LSOverride
+._*
+
+# Testing
+coverage/
+.nyc_output
+
+# Logs
+logs/
+*.log
+
+# Temporary files
+tmp/
+temp/
+*.tmp
+
+
+# Temporary files
+tmp/
+temp/
+*.tmp
