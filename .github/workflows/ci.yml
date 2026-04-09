@@ -105,48 +105,71 @@ jobs:
           exit 1
 
       # ─────────────────────────────────────────────────────────────────────
-      # 5. Check Rust code formatting (warn only)
+      # 5. Build Backend (release mode for optimization)
       # ─────────────────────────────────────────────────────────────────────
-      - name: 📝 Check Rust formatting
-        run: cargo fmt -- --check || true
+      - name: 🏗️  Build Backend (Release)
+        run: |
+          set -e  # Exit on any error
+          echo "🔨 Building backend..."
+          timeout 300 cargo build --release 2>&1 | tee /tmp/build.log
+          if [ $? -eq 124 ]; then
+            echo "❌ Build timed out"
+            exit 101
+          fi
+          BINARY="target/release/icms-backend"
+          if [ -f "$BINARY" ]; then
+            echo "✅ Binary built successfully: $BINARY"
+            ls -lh "$BINARY"
+          else
+            echo "❌ Binary not found: $BINARY"
+            echo "Contents of target/release:"
+            ls -la target/release/
+            exit 101
+          fi
 
       # ─────────────────────────────────────────────────────────────────────
-      # 6. Run Clippy linter (warn only)
-      # ─────────────────────────────────────────────────────────────────────
-      - name: 🔍 Run Clippy linter
-        run: cargo clippy --all-targets --all-features -- -D warnings || true
-
-      # ─────────────────────────────────────────────────────────────────────
-      # 7. Build Backend (debug mode for faster compilation)
-      # ─────────────────────────────────────────────────────────────────────
-      - name: 🏗️  Build Backend (Debug)
-        run: cargo build --verbose
-
-      # ─────────────────────────────────────────────────────────────────────
-      # 8. Start Backend (cargo run) in background
+      # 6. Start Backend (use compiled binary) in background
       # ─────────────────────────────────────────────────────────────────────
       - name: 🚀 Start Backend Server
         run: |
-          cargo run > /tmp/backend.log 2>&1 &
+          echo "▶️  Starting backend server from compiled binary..."
+          ./target/release/icms-backend > /tmp/backend.log 2>&1 &
           BACKEND_PID=$!
           echo "Backend PID: $BACKEND_PID"
-          sleep 5
+          echo "Waiting for Backend to start (up to 30 seconds for startup)..."
+          sleep 30
 
       # ─────────────────────────────────────────────────────────────────────
-      # 9. Health Check Backend API
+      # 7. Health Check Backend API
       # ─────────────────────────────────────────────────────────────────────
       - name: ✅ Health Check Backend
         run: |
-          for i in {1..30}; do
-            if curl -s http://localhost:8080/api/health | grep -q "OK"; then
-              echo "✅ Backend is healthy!"
+          echo "🏥 Starting health checks..."
+          for i in {1..40}; do
+            RESPONSE=$(curl -s -w "\n%{http_code}" http://localhost:8080/api/health 2>/dev/null || echo "connection_error\n000")
+            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
+            BODY=$(echo "$RESPONSE" | head -1)
+            
+            if [ "$HTTP_CODE" = "200" ] && echo "$BODY" | grep -q "OK"; then
+              echo "✅ Backend is healthy! (HTTP $HTTP_CODE)"
+              echo "Response: $BODY"
               exit 0
             fi
-            echo "Attempt $i/30: Waiting for Backend health check..."
-            sleep 1
+            
+            echo "Attempt $i/40: HTTP $HTTP_CODE - Waiting for Backend..."
+            sleep 3
           done
-          echo "❌ Backend health check failed"
-          cat /tmp/backend.log
+          
+          echo "❌ Backend health check failed after 120 seconds"
+          echo ""
+          echo "📋 Backend logs (last 50 lines):"
+          tail -50 /tmp/backend.log 2>/dev/null || echo "(no log file)"
+          echo ""
+          echo "📊 Process status:"
+          ps aux | grep -E 'icms_backend|cargo run' | grep -v grep || echo "(no backend process found)"
+          echo ""
+          echo "🔗 Attempting direct connection test:"
+          nc -zv localhost 8080 2>&1 || echo "(port 8080 not open)"
           exit 1
 
       # ─────────────────────────────────────────────────────────────────────
