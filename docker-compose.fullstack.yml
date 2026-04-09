@@ -1,0 +1,89 @@
+version: "3.8"
+
+services:
+  # ================================
+  # MongoDB Database Service
+  # ================================
+  icms-mongodb:
+    image: mongo:7.0
+    container_name: icms-mongodb
+    restart: unless-stopped
+    ports:
+      - "27017:27017"
+    environment:
+      MONGO_INITDB_ROOT_USERNAME: admin
+      MONGO_INITDB_ROOT_PASSWORD: admin123
+      MONGO_INITDB_DATABASE: icms_db
+    volumes:
+      - mongodb_data:/data/db
+    networks:
+      - icms_network
+    healthcheck:
+      test: echo 'db.runCommand("ping").ok' | mongosh localhost:27017/test --quiet
+      interval: 10s
+      timeout: 5s
+      retries: 5
+      start_period: 10s
+
+  # ================================
+  # Rust Axum Backend Service
+  # ================================
+  icms-backend:
+    build:
+      context: .
+      dockerfile: ./backend/Dockerfile
+      args:
+        - BUILDKIT_INLINE_CACHE=1
+    container_name: icms-backend
+    restart: unless-stopped
+    ports:
+      - "8080:8080"
+    environment:
+      # MongoDB Config
+      - MONGODB_URI=mongodb://admin:admin123@icms-mongodb:27017/icms_db?authSource=admin
+      # JWT Authentication
+      - JWT_SECRET=icms_super_secret_jwt_key_that_is_long_enough_2026
+      # Other configs
+      - PORT=8080
+      - RUST_LOG=info
+      - VITE_APP_ENVIRONMENT=docker
+    depends_on:
+      icms-mongodb:
+        condition: service_healthy
+    networks:
+      - icms_network
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/api/health"]
+      interval: 30s
+      timeout: 3s
+      retries: 3
+
+  # ================================
+  # React Vite Frontend Service
+  # ================================
+  icms-frontend:
+    build:
+      context: .
+      dockerfile: ./frontend-TU/Dockerfile
+      args:
+        - VITE_BACKEND_URL=http://localhost:8080
+        - VITE_APP_ENVIRONMENT=docker
+    container_name: icms-frontend
+    restart: unless-stopped
+    ports:
+      - "5173:5173"
+    depends_on:
+      - icms-backend
+    networks:
+      - icms_network
+    environment:
+      - VITE_BACKEND_URL=http://localhost:8080
+      - VITE_APP_ENVIRONMENT=docker
+
+networks:
+  icms_network:
+    driver: bridge
+
+volumes:
+  mongodb_data:
+    name: icms_mongo_data
