@@ -601,7 +601,7 @@ This project is licensed under the **MIT License** - see LICENSE file for detail
 - [GitHub Actions](https://docs.github.com/en/actions)
 
 DEMO VIDEO:
-
+https://github.com/ThanhDatDaizen/QA-Project/issues/1#issue-4239849457
 
 
 
