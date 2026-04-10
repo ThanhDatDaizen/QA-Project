@@ -1,4 +1,4 @@
-name: CI/CD Pipeline - Development Mode (Local Backend+Frontend with Docker MongoDB)
+name: CI/CD Pipeline - Fullstack Build Mode
 
 # ═══════════════════════════════════════════════════════════════════════════
 # TRIGGERS
@@ -13,15 +13,11 @@ on:
       - "**.md"
       - ".dockerignore"
       - "nginx.conf"
-
   pull_request:
     branches:
       - main
       - develop
-    paths-ignore:
-      - "**.md"
-
-  workflow_dispatch:  # Manual trigger
+  workflow_dispatch:
 
 # ═══════════════════════════════════════════════════════════════════════════
 # ENVIRONMENT
@@ -37,19 +33,10 @@ env:
 # JOBS
 # ═══════════════════════════════════════════════════════════════════════════
 jobs:
-  # ═════════════════════════════════════════════════════════════════════════
-  # 🦀 BACKEND - Rust Build & Test (Local)
-  # ═════════════════════════════════════════════════════════════════════════
-  backend:
-    name: 🦀 Backend (Rust/Axum)
+  build-and-test:
+    name: 🏗️ Fullstack Build & Test
     runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./backend
 
-    # ───────────────────────────────────────────────────────────────────────
-    # MongoDB Service Container
-    # ───────────────────────────────────────────────────────────────────────
     services:
       mongodb:
         image: mongo:7.0
@@ -66,29 +53,38 @@ jobs:
           MONGO_INITDB_DATABASE: icms_db
 
     steps:
-      # ─────────────────────────────────────────────────────────────────────
-      # 1. Checkout code
-      # ─────────────────────────────────────────────────────────────────────
       - name: 📥 Checkout code
         uses: actions/checkout@v4
 
       # ─────────────────────────────────────────────────────────────────────
-      # 2. Setup Rust toolchain
+      # 1. FRONTEND BUILD (Để tạo ra thư mục dist cho Rust nhúng)
+      # ─────────────────────────────────────────────────────────────────────
+      - name: 📦 Setup Node.js (v20)
+        uses: actions/setup-node@v4
+        with:
+          node-version: "20"
+          cache: "npm"
+          cache-dependency-path: "frontend-TU/package-lock.json"
+
+      - name: 🏗️ Build Frontend Assets
+        run: |
+          cd frontend-TU
+          npm install --legacy-peer-deps
+          npm run build
+          echo "✅ Frontend build complete. Checking dist folder:"
+          ls -la dist/
+
+      # ─────────────────────────────────────────────────────────────────────
+      # 2. BACKEND PREPARATION
       # ─────────────────────────────────────────────────────────────────────
       - name: 🦀 Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
 
-      # ─────────────────────────────────────────────────────────────────────
-      # 3. Cache Rust dependencies
-      # ─────────────────────────────────────────────────────────────────────
       - name: 💾 Cache Rust dependencies
         uses: Swatinem/rust-cache@v2
         with:
           workspaces: "./backend"
 
-      # ─────────────────────────────────────────────────────────────────────
-      # 4. Wait for MongoDB to be ready
-      # ─────────────────────────────────────────────────────────────────────
       - name: ⏳ Wait for MongoDB
         run: |
           for i in {1..30}; do
@@ -99,222 +95,50 @@ jobs:
             echo "Attempt $i/30: Waiting for MongoDB..."
             sleep 1
           done
-          echo "❌ MongoDB timeout"
           exit 1
 
       # ─────────────────────────────────────────────────────────────────────
-      # 5. Build Backend (release mode for optimization)
+      # 3. BUILD & RUN BACKEND
       # ─────────────────────────────────────────────────────────────────────
-      - name: 🏗️  Build Backend (Release)
+      - name: 🏗️ Build Backend (Release)
+        working-directory: ./backend
         run: |
-          set -e  # Exit on any error
-          echo "🔨 Building backend..."
-          timeout 300 cargo build --release 2>&1 | tee /tmp/build.log
-          if [ $? -eq 124 ]; then
-            echo "❌ Build timed out"
-            exit 101
-          fi
+          set -e
+          echo "🔨 Building backend with embedded frontend..."
+          cargo build --release
+          
           BINARY="target/release/icms-backend"
           if [ -f "$BINARY" ]; then
-            echo "✅ Binary built successfully: $BINARY"
-            ls -lh "$BINARY"
+            echo "✅ Binary built successfully!"
           else
-            echo "❌ Binary not found: $BINARY"
-            echo "Contents of target/release:"
-            ls -la target/release/
+            echo "❌ Binary not found!"
             exit 101
           fi
 
-      # ─────────────────────────────────────────────────────────────────────
-      # 6. Start Backend (use compiled binary) in background
-      # ─────────────────────────────────────────────────────────────────────
       - name: 🚀 Start Backend Server
+        working-directory: ./backend
         run: |
-          echo "▶️  Starting backend server from compiled binary..."
           ./target/release/icms-backend > /tmp/backend.log 2>&1 &
-          BACKEND_PID=$!
-          echo "Backend PID: $BACKEND_PID"
-          echo "Waiting for Backend to start (up to 30 seconds for startup)..."
-          sleep 30
+          echo "Backend started in background."
+          sleep 15
 
       # ─────────────────────────────────────────────────────────────────────
-      # 7. Health Check Backend API
+      # 4. HEALTH CHECK
       # ─────────────────────────────────────────────────────────────────────
-      - name: ✅ Health Check Backend
+      - name: ✅ Health Check API
         run: |
-          echo "🏥 Starting health checks..."
-          for i in {1..40}; do
-            RESPONSE=$(curl -s -w "\n%{http_code}" http://localhost:8080/api/health 2>/dev/null || echo "connection_error\n000")
-            HTTP_CODE=$(echo "$RESPONSE" | tail -1)
-            BODY=$(echo "$RESPONSE" | head -1)
-            
-            if [ "$HTTP_CODE" = "200" ] && echo "$BODY" | grep -q "OK"; then
-              echo "✅ Backend is healthy! (HTTP $HTTP_CODE)"
-              echo "Response: $BODY"
+          for i in {1..20}; do
+            RESPONSE=$(curl -s http://localhost:8080/api/health || echo "fail")
+            if echo "$RESPONSE" | grep -q "OK"; then
+              echo "✅ Backend is healthy!"
               exit 0
             fi
-            
-            echo "Attempt $i/40: HTTP $HTTP_CODE - Waiting for Backend..."
+            echo "Attempt $i/20: Waiting for API..."
             sleep 3
           done
-          
-          echo "❌ Backend health check failed after 120 seconds"
-          echo ""
-          echo "📋 Backend logs (last 50 lines):"
-          tail -50 /tmp/backend.log 2>/dev/null || echo "(no log file)"
-          echo ""
-          echo "📊 Process status:"
-          ps aux | grep -E 'icms_backend|cargo run' | grep -v grep || echo "(no backend process found)"
-          echo ""
-          echo "🔗 Attempting direct connection test:"
-          nc -zv localhost 8080 2>&1 || echo "(port 8080 not open)"
+          echo "❌ API failed to respond"
+          tail -n 50 /tmp/backend.log
           exit 1
 
-      # ─────────────────────────────────────────────────────────────────────
-      # 10. Report success
-      # ─────────────────────────────────────────────────────────────────────
-      - name: ✅ Backend Running Successfully
-        if: success()
-        run: echo "✅ Backend is running and healthy!"
-
-  # ═════════════════════════════════════════════════════════════════════════
-  # ⚛️ FRONTEND - React Build & Test (Local)
-  # ═════════════════════════════════════════════════════════════════════════
-  frontend:
-    name: ⚛️  Frontend (React/Vite)
-    runs-on: ubuntu-latest
-    defaults:
-      run:
-        working-directory: ./frontend-TU
-
-    steps:
-      # ─────────────────────────────────────────────────────────────────────
-      # 1. Checkout code
-      # ─────────────────────────────────────────────────────────────────────
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-
-      # ─────────────────────────────────────────────────────────────────────
-      # 2. Setup Node.js (v20)
-      # ─────────────────────────────────────────────────────────────────────
-      - name: 📦 Setup Node.js (v20)
-        uses: actions/setup-node@v4
-        with:
-          node-version: "20"
-          cache: "npm"
-          cache-dependency-path: "frontend-TU/package-lock.json"
-
-      # ─────────────────────────────────────────────────────────────────────
-      # 3. Install npm dependencies
-      # ─────────────────────────────────────────────────────────────────────
-      - name: 📚 Install npm dependencies
-        run: npm install --legacy-peer-deps
-
-      # ─────────────────────────────────────────────────────────────────────
-      # 5. Start Frontend (npm run dev) in background
-      # ─────────────────────────────────────────────────────────────────────
-      - name: 🚀 Start Frontend Dev Server
-        run: |
-          npm run dev > /tmp/frontend.log 2>&1 &
-          FRONTEND_PID=$!
-          echo "Frontend PID: $FRONTEND_PID"
-          sleep 5
-
-      # ─────────────────────────────────────────────────────────────────────
-      # 6. Health Check Frontend
-      # ─────────────────────────────────────────────────────────────────────
-      - name: ✅ Health Check Frontend
-        run: |
-          for i in {1..30}; do
-            if curl -s http://localhost:5173 | grep -q "html\|hydrate\|app"; then
-              echo "✅ Frontend is running!"
-              exit 0
-            fi
-            echo "Attempt $i/30: Waiting for Frontend..."
-            sleep 1
-          done
-          echo "⚠️  Frontend health check timed out (may still be running)"
-          cat /tmp/frontend.log | tail -10
-          # Don't fail - frontend dev server startup is variable
-          exit 0
-
-      # ─────────────────────────────────────────────────────────────────────
-      # 7. Run Frontend Tests
-      # ─────────────────────────────────────────────────────────────────────
-      - name: 🧪 Run Frontend Tests
-        run: npm test || true  # Tests may not be configured
-
-      # ─────────────────────────────────────────────────────────────────────
-      # 8. Report success
-      # ─────────────────────────────────────────────────────────────────────
-      - name: ✅ Frontend Running Successfully
-        if: success()
-        run: echo "✅ Frontend dev server started successfully!"
-
-  # ═════════════════════════════════════════════════════════════════════════
-  # 📊 CODE QUALITY CHECK
-  # ═════════════════════════════════════════════════════════════════════════
-  code-quality:
-    name: 📊 Code Quality
-    runs-on: ubuntu-latest
-    needs: [backend, frontend]
-
-    steps:
-      # ─────────────────────────────────────────────────────────────────────
-      # 1. Checkout code
-      # ─────────────────────────────────────────────────────────────────────
-      - name: 📥 Checkout code
-        uses: actions/checkout@v4
-
-      # ─────────────────────────────────────────────────────────────────────
-      # 2. SonarCloud scan (optional)
-      # ─────────────────────────────────────────────────────────────────────
-      - name: 🔍 SonarCloud Scan (Optional)
-        uses: SonarSource/sonarcloud-github-action@master
-        env:
-          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
-        continue-on-error: true
-
-  # ═════════════════════════════════════════════════════════════════════════
-  # ✅ FINAL STATUS
-  # ═════════════════════════════════════════════════════════════════════════
-  final-status:
-    name: ✅ Final Status
-    runs-on: ubuntu-latest
-    needs: [backend, frontend, code-quality]
-    if: always()
-
-    steps:
-      # ─────────────────────────────────────────────────────────────────────
-      # Success case
-      # ─────────────────────────────────────────────────────────────────────
-      - name: 🎉 All Checks Passed!
-        if: ${{ needs.backend.result == 'success' && needs.frontend.result == 'success' }}
-        run: |
-          echo "╔════════════════════════════════════════════════════════════════╗"
-          echo "║                  ✅ CI PIPELINE SUCCESSFUL!                    ║"
-          echo "╠════════════════════════════════════════════════════════════════╣"
-          echo "║                                                              ║"
-          echo "║  ✅ Backend (Rust):   Running (cargo run)                    ║"
-          echo "║  ✅ Frontend (React): Running (npm run dev)                   ║"
-          echo "║  ✅ MongoDB:          Running in Docker Service               ║"
-          echo "║                                                              ║"
-          echo "║  Architecture:                                               ║"
-          echo "║  - Backend runs locally (cargo run - development)             ║"
-          echo "║  - Frontend runs locally (npm run dev - development)          ║"
-          echo "║  - MongoDB runs in Docker                                     ║"
-          echo "║                                                              ║"
-          echo "║  Ready to deploy! 🚀                                          ║"
-          echo "║                                                              ║"
-          echo "╚════════════════════════════════════════════════════════════════╝"
-
-      # ─────────────────────────────────────────────────────────────────────
-      # Failure case
-      # ─────────────────────────────────────────────────────────────────────
-      - name: ❌ Build Failed
-        if: ${{ needs.backend.result != 'success' || needs.frontend.result != 'success' }}
-        run: |
-          echo "⚠️  One or more checks failed!"
-          echo "Backend:  ${{ needs.backend.result }}"
-          echo "Frontend: ${{ needs.frontend.result }}"
-          exit 1
+      - name: 🎉 Final Report
+        run: echo "╔════════════════════════════════════════╗ ║ CI PIPELINE SUCCESSFUL! 🚀 ╚════════════════════════════════════════╝"
