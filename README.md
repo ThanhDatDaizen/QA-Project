@@ -601,7 +601,7 @@ This project is licensed under the **MIT License** - see LICENSE file for detail
 - [GitHub Actions](https://docs.github.com/en/actions)
 
 DEMO VIDEO:
-https://github.com/ThanhDatDaizen/QA-Project/issues/1#issue-4239849457
+[![Xem Video Demo](https://drive.google.com/drive/folders/1f39c5KCTdEgREPSUJLuEzQqWVnO9fvsK?dmr=1&ec=wgc-drive-%5Bmodule%5D-goto)]
 
 
 
