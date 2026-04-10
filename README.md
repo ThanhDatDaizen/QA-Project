@@ -601,7 +601,7 @@ This project is licensed under the **MIT License** - see LICENSE file for detail
 - [GitHub Actions](https://docs.github.com/en/actions)
 
 DEMO VIDEO:
-[Demo Full Process (Google Drive)]((https://drive.google.com/drive/folders/1f39c5KCTdEgREPSUJLuEzQqWVnO9fvsK?usp=drive_link))
+[Demo Full Process (Google Drive)](https://drive.google.com/drive/folders/1f39c5KCTdEgREPSUJLuEzQqWVnO9fvsK?usp=drive_link)
 
 
 
