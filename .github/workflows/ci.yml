@@ -77,8 +77,6 @@ jobs:
       # ─────────────────────────────────────────────────────────────────────
       - name: 🦀 Setup Rust toolchain
         uses: dtolnay/rust-toolchain@stable
-        with:
-          toolchain: 1.75
 
       # ─────────────────────────────────────────────────────────────────────
       # 3. Cache Rust dependencies

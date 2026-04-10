@@ -346,10 +346,10 @@ export class CommandParser {
       const ideas = Array.isArray(ideasRes.data) ? ideasRes.data : (ideasRes.data?.data || []);
       const users = Array.isArray(usersRes.data) ? usersRes.data : (usersRes.data?.data || []);
 
-      const totalIdeas = ideas.length;
-      const approvedIdeas = ideas.filter((i: any) => i.status === 'Approved' || i.status === 'APPROVED').length;
-      const pendingIdeas = ideas.filter((i: any) => i.status === 'Pending' || i.status === 'PENDING').length;
-      const totalUsers = users.length;
+      const totalIdeas = Array.isArray(ideas) ? ideas.length : 0;
+      const approvedIdeas = Array.isArray(ideas) ? ideas.filter((i: any) => i.status === 'Approved' || i.status === 'APPROVED').length : 0;
+      const pendingIdeas = Array.isArray(ideas) ? ideas.filter((i: any) => i.status === 'Pending' || i.status === 'PENDING').length : 0;
+      const totalUsers = Array.isArray(users) ? users.length : 0;
 
       let output = '✅ [SUCCESS] Command executed: super --stats\n';
       output += '\n📊 SYSTEM STATISTICS:\n';

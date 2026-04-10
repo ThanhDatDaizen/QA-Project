@@ -195,9 +195,9 @@ class TuApiService {
       if (!baseURL) {
         // Tú trong Docker hoặc production: sử dụng relative path
         // Nginx sẽ proxy /api/ requests tới backend:8080
-        if (window.location.hostname === 'localhost' && import.meta.env.DEV) {
+        if ((window.location.hostname === 'localhost' || window.location.hostname === '127.0.0.1') && import.meta.env.DEV) {
           // Tú development mode: backend chạy ở localhost:3000
-          baseURL = 'http://localhost:8080/api';
+          baseURL = 'http://127.0.0.1:8080/api';
         } else {
           // Tú production/Docker: sử dụng <current-host>/api (Nginx proxy)
           baseURL = '/api';
@@ -222,32 +222,44 @@ class TuApiService {
    * GET Request
    */
   async get<T = Record<string, unknown>>(url: string, config?: Record<string, unknown>): Promise<TuApiResponse<T>> {
-    const response = await this.client.get<TuApiResponse<T>>(url, config);
-    return response.data;
+    const response = await this.client.get<T>(url, config as any);
+    return {
+      success: true,
+      data: response.data as unknown as T,
+    } as TuApiResponse<T>;
   }
 
   /**
    * POST Request
    */
-  async post<T = Record<string, unknown>>(url: string, data?: Record<string, unknown>, config?: Record<string, unknown>): Promise<TuApiResponse<T>> {
-    const response = await this.client.post<TuApiResponse<T>>(url, data, config);
-    return response.data;
+  async post<T = Record<string, unknown>>(url: string, data?: any, config?: Record<string, unknown>): Promise<TuApiResponse<T>> {
+    const response = await this.client.post<T>(url, data, config as any);
+    return {
+      success: true,
+      data: response.data as unknown as T,
+    } as TuApiResponse<T>;
   }
 
   /**
    * PUT Request
    */
-  async put<T = Record<string, unknown>>(url: string, data?: Record<string, unknown>, config?: Record<string, unknown>): Promise<TuApiResponse<T>> {
-    const response = await this.client.put<TuApiResponse<T>>(url, data, config);
-    return response.data;
+  async put<T = Record<string, unknown>>(url: string, data?: any, config?: Record<string, unknown>): Promise<TuApiResponse<T>> {
+    const response = await this.client.put<T>(url, data, config as any);
+    return {
+      success: true,
+      data: response.data as unknown as T,
+    } as TuApiResponse<T>;
   }
 
   /**
    * DELETE Request
    */
   async delete<T = Record<string, unknown>>(url: string, config?: Record<string, unknown>): Promise<TuApiResponse<T>> {
-    const response = await this.client.delete<TuApiResponse<T>>(url, config);
-    return response.data;
+    const response = await this.client.delete<T>(url, config as any);
+    return {
+      success: true,
+      data: response.data as unknown as T,
+    } as TuApiResponse<T>;
   }
 
   /**

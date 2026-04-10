@@ -4,18 +4,24 @@ use uuid::Uuid;
 use validator::Validate;
 
 // ============================================================
-// 🔧 CUSTOM SERDE HELPERS
+// 🔧 CUSTOM SERDE HELPERS — Thắp nhang cho UUID/serde (Sinh viên style)
+// Nếu lỗi thì trách borrow checker, chứ không sửa logic
 // ============================================================
 pub mod uuid_serde_string {
     use serde::{Deserialize, Deserializer};
     use uuid::Uuid;
+    use bson::Bson;
 
     pub fn deserialize<'de, D>(deserializer: D) -> Result<Uuid, D::Error>
     where
         D: Deserializer<'de>,
     {
-        let s = String::deserialize(deserializer)?;
-        Uuid::parse_str(&s).map_err(serde::de::Error::custom)
+        let value = Bson::deserialize(deserializer)?;
+        match value {
+            Bson::String(s) => Uuid::parse_str(&s).map_err(serde::de::Error::custom),
+            Bson::Binary(b) => Uuid::from_slice(&b.bytes).map_err(serde::de::Error::custom),
+            _ => Err(serde::de::Error::custom("Expected string or binary for Uuid")),
+        }
     }
 }
 
@@ -23,66 +29,71 @@ fn deserialize_optional_uuid<'de, D>(deserializer: D) -> Result<Option<Uuid>, D:
 where
     D: Deserializer<'de>,
 {
-    let opt: Option<String> = Option::deserialize(deserializer)?;
-    Ok(opt.and_then(|s| Uuid::parse_str(&s).ok()))
+    let opt: Option<bson::Bson> = Option::deserialize(deserializer)?;
+    match opt {
+        Some(bson::Bson::String(s)) => Uuid::parse_str(&s).map(Some).map_err(serde::de::Error::custom),
+        Some(bson::Bson::Binary(b)) => Uuid::from_slice(&b.bytes).map(Some).map_err(serde::de::Error::custom),
+        Some(_) => Err(serde::de::Error::custom("Expected string or binary for optional Uuid")),
+        None => Ok(None),
+    }
 }
 
-// HỆ THỐNG PERMISSIONS - RBAC (18 QUYỀN)
+// HỆ THỐNG PERMISSIONS - RBAC (quyền để phân quyền, viết kiểu sinh viên lầy)
 #[derive(Debug, Clone, Copy, Serialize, Deserialize, PartialEq, Eq, Hash)]
 pub enum Permission {
     // Quản lý ý tưởng (7 quyền)
     #[serde(rename = "CreateIdea")]
-    CreateIdea,                 // Tạo ý tưởng mới
+    CreateIdea,                 // Tạo ý tưởng mới — viết lúc 4h sáng, hy vọng chạy
     #[serde(rename = "ReadOwnIdea")]
-    ReadOwnIdea,                // Xem ý tưởng của chính mình
+    ReadOwnIdea,                // Xem ý tưởng của mình (đừng hóng view của người khác)
     #[serde(rename = "ReadAllIdeas")]
-    ReadAllIdeas,               // Xem tất cả ý tưởng
+    ReadAllIdeas,               // Xem tất cả ý tưởng (admin/manager) — cổng này chỉ cho sếp vào
     #[serde(rename = "UpdateOwnIdea")]
-    UpdateOwnIdea,              // Chỉnh sửa ý tưởng của mình
+    UpdateOwnIdea,              // Sửa ý tưởng của mình
     #[serde(rename = "UpdateAnyIdea")]
-    UpdateAnyIdea,              // Chỉnh sửa bất kỳ ý tưởng nào
+    UpdateAnyIdea,              // Sửa ý tưởng bất kỳ (admin)
     #[serde(rename = "DeleteOwnIdea")]
     DeleteOwnIdea,              // Xóa ý tưởng của mình
     #[serde(rename = "DeleteAnyIdea")]
-    DeleteAnyIdea,              // Xóa bất kỳ ý tưởng nào
+    DeleteAnyIdea,              // Xóa ý tưởng bất kỳ (admin)
 
     // Phê duyệt (2 quyền)
     #[serde(rename = "ApproveIdea")]
-    ApproveIdea,                // Duyệt phê duyệt ý tưởng
+    ApproveIdea,                // Phê duyệt ý tưởng (cảm ơn deadline)
     #[serde(rename = "RejectIdea")]
     RejectIdea,                 // Từ chối ý tưởng
 
     // Phân tích & Báo cáo (1 quyền)
     #[serde(rename = "ViewAnalytics")]
-    ViewAnalytics,              // Xem thống kê và báo cáo
+    ViewAnalytics,              // Xem báo cáo / analytics — để khoe với thầy cô
 
     // Quản lý người dùng (2 quyền)
     #[serde(rename = "ManageUsers")]
-    ManageUsers,                // Quản lý người dùng
+    ManageUsers,                // Quản lý user
     #[serde(rename = "ManageRoles")]
-    ManageRoles,                // Quản lý vai trò và quyền
+    ManageRoles,                // Quản lý role/permission
 
     // Kiểm toán (1 quyền)
     #[serde(rename = "ViewAuditLogs")]
-    ViewAuditLogs,              // Xem nhật ký kiểm toán
+    ViewAuditLogs,              // Xem audit logs
 
     // Quản lý Category (2 quyền - Danh mục)
     #[serde(rename = "ManageCategories")]
     ManageCategories,           // Thêm/sửa danh mục
     #[serde(rename = "DeleteCategory")]
-    DeleteCategory,             // Xóa danh mục (chỉ khi không có idea)
+    DeleteCategory,             // Xóa danh mục (nếu không có idea dùng)
 
     // Quản lý hệ thống (3 quyền)
     #[serde(rename = "ExportData")]
     ExportData,                 // Xuất dữ liệu (CSV/ZIP)
     #[serde(rename = "ManageSettings")]
-    ManageSettings,             // Quản lý cài đặt hệ thống
+    ManageSettings,             // Cấu hình hệ thống
     #[serde(rename = "SystemAdmin")]
-    SystemAdmin,                // Admin toàn hệ thống
+    SystemAdmin,                // Quyền admin hệ thống (làm vua trong 1 ngày)
     
     // Super Admin (1 quyền)
     #[serde(rename = "ManageSystem")]
-    ManageSystem,               // Quản lý toàn bộ hệ thống (ban/unban, metrics, etc.)
+    ManageSystem,               // Toàn quyền (ban/unban, metrics, đồ án của tui ở đây)
 }
 
 impl std::fmt::Display for Permission {
@@ -111,15 +122,15 @@ impl std::fmt::Display for Permission {
     }
 }
 
-// VAI TRÒ (ROLE) - 5 cấp độ (thêm QAManager, QACoordinator)
+// VAI TRÒ (ROLE) - 5 cấp độ (thêm QAManager, QACoordinator) — trách nhiệm khác nhau, cà khịa khác nhau
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum Role {
     #[serde(rename = "Admin")]
     Admin,
     #[serde(rename = "QAManager")]
-    QAManager,                  // Quản lý QA - Phê duyệt, quản lý danh mục, xuất dữ liệu
+    QAManager,                  // Quản lý QA - Phê duyệt, quản lý danh mục, xuất dữ liệu (ăn pizza sau giờ làm)
     #[serde(rename = "QACoordinator")]
-    QACoordinator,              // Phối hợp QA - Xem, quản lý idea (không phê duyệt)
+    QACoordinator,              // Phối hợp QA - Xem, quản lý idea (không phê duyệt) — tay trái vỗ tay
     #[serde(rename = "Contributor")]
     Contributor,
     #[serde(rename = "Viewer")]
@@ -142,10 +153,10 @@ impl std::fmt::Display for Role {
 }
 
 impl Role {
-    ///  Trả về danh sách 18 quyền hạn cho từng vai trò
+    ///  Trả về danh sách quyền cho từng vai trò (tui đếm bằng mắt)
     pub fn get_permissions(&self) -> Vec<Permission> {
         match self {
-            // SuperAdmin: Toàn quyền hệ thống (19 quyền)
+            // SuperAdmin: Toàn quyền hệ thống (19 quyền) — đừng trách nếu bị ban
             Role::SuperAdmin => vec![
                 Permission::CreateIdea,
                 Permission::ReadOwnIdea,
@@ -167,7 +178,7 @@ impl Role {
                 Permission::SystemAdmin,
                 Permission::ManageSystem,
             ],
-            // Admin: Toàn quyền (18 quyền)
+            // Admin: Toàn quyền (18 quyền) — tập trung đổ lỗi cho ai đó
             Role::Admin => vec![
                 Permission::CreateIdea,
                 Permission::ReadOwnIdea,
@@ -188,7 +199,7 @@ impl Role {
                 Permission::ManageSettings,
                 Permission::SystemAdmin,
             ],
-            // QA Manager: Phê duyệt, quản lý danh mục, xuất dữ liệu (14 quyền)
+            // QA Manager: Phê duyệt, quản lý danh mục, xuất dữ liệu (14 quyền) — rút ca phê
             Role::QAManager => vec![
                 Permission::CreateIdea,
                 Permission::ReadOwnIdea,
@@ -238,16 +249,16 @@ impl Role {
 }
 
 
-// DEPARTMENT MODEL - Quản lý phòng ban / khoa
+// DEPARTMENT MODEL - Quản lý phòng ban / khoa (nơi gửi ý tưởng và đổ lỗi nhau)
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct Department {
     #[serde(rename = "_id", deserialize_with = "uuid_serde_string::deserialize")]
     pub id: Uuid,
-    pub name: String,                          // "Khoa Công Nghệ Thông Tin"
+    pub name: String,                          // "Khoa Công Nghệ Thông Tin" — nơi tập trung ý tưởng xịn xò
     pub description: Option<String>,
     #[serde(deserialize_with = "deserialize_optional_uuid")]
-    pub qa_coordinator_id: Option<Uuid>,       // QA Coordinator của phòng ban
+    pub qa_coordinator_id: Option<Uuid>,       // QA Coordinator của phòng ban (người chịu trách nhiệm rối)
     pub qa_coordinator_email: Option<String>,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -291,17 +302,17 @@ impl DepartmentResponse {
 }
 
 
-// ACADEMIC YEAR - Quản lý năm học và hạn nộp
+// ACADEMIC YEAR - Quản lý năm học và hạn nộp (deadline: nơi sinh ra các câu nói "thôi xong")
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AcademicYear {
     #[serde(rename = "_id", deserialize_with = "uuid_serde_string::deserialize")]
     pub id: Uuid,
-    pub name: String,                          // "2025-2026"
+    pub name: String,                          // "2025-2026" — viết vội lúc deadline
     pub start_date: NaiveDate,
     pub end_date: NaiveDate,
-    pub closure_date: DateTime<Utc>,           // Hạn nộp ý tưởng
-    pub final_closure_date: DateTime<Utc>,     // Hạn bình luận
+    pub closure_date: DateTime<Utc>,           // Hạn nộp ý tưởng — nếu trễ thì thôi, mai nộp sau
+    pub final_closure_date: DateTime<Utc>,     // Hạn bình luận — bình luận sau hạn = xin lỗi
     pub is_active: bool,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
@@ -354,19 +365,19 @@ impl AcademicYearResponse {
     }
 }
 
-// TRẠNG THÁI Ý TƯỞNG
+// TRẠNG THÁI Ý TƯỞNG - Mỗi trạng thái là một kiếp sinh viên
 
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum IdeaStatus {
     #[serde(rename = "Draft")]
-    Draft,                     // Nháp
+    Draft,                     // Nháp (viết vội, lưu tạm)
     #[serde(rename = "Submitted")]
-    Submitted,                 // Đã gửi
+    Submitted,                 // Đã gửi (cầu trời đừng lỗi 500)
     #[serde(rename = "UnderReview")]
-    UnderReview,               // Đang xét duyệt
+    UnderReview,               // Đang xét duyệt (chờ sếp đọc)
     #[serde(rename = "Approved")]
-    Approved,                  // Đã duyệt
+    Approved,                  // Đã duyệt (cảm ơn trời)
     #[serde(rename = "Rejected")]
     Rejected,                  // Bị từ chối
     #[serde(rename = "Archived")]
@@ -386,7 +397,7 @@ impl std::fmt::Display for IdeaStatus {
     }
 }
 
-// USER MODEL - Schema lưu trữ người dùng (+ department_id)
+// USER MODEL - Schema lưu trữ người dùng (+ department_id) — chứa mối hy vọng và pass hash
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct User {
@@ -394,13 +405,13 @@ pub struct User {
     pub id: Uuid,
     pub email: String,
     pub username: String,
-    pub password_hash: String,  // Mã hóa bcrypt
+    pub password_hash: String,  // Mã hóa bcrypt (tui không lưu pass raw đâu nha)
     pub role: Role,
     #[serde(deserialize_with = "deserialize_optional_uuid")]
     pub department_id: Option<Uuid>,           // Thêm khoa (phân quyền theo khoa)
     pub is_active: bool,
-    pub is_banned: bool,                       // Bị khóa tài khoản
-    pub ban_expires_at: Option<DateTime<Utc>>, // Thời gian hết hạn khóa (null = vĩnh viễn)
+    pub is_banned: bool,                       // Bị khóa tài khoản (do troll hoặc ăn ở)
+    pub ban_expires_at: Option<DateTime<Utc>>, // Thời gian hết hạn khóa (null = vĩnh viễn — khóc)
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
     pub last_login: Option<DateTime<Utc>>,
@@ -415,7 +426,7 @@ pub struct UserProfile {
     pub bio: Option<String>,
 }
 
-// REQUEST/RESPONSE DTOs - Giao tiếp API
+// REQUEST/RESPONSE DTOs - Giao tiếp API (giữ gọn để khỏi bị rối)
 
 #[derive(Debug, Serialize, Deserialize, Validate)]
 pub struct RegisterRequest {
@@ -513,7 +524,8 @@ pub struct Idea {
     pub creator_name: String,
     #[serde(deserialize_with = "deserialize_optional_uuid")]
     pub department_id: Option<Uuid>,           // Thêm khoa
-    pub is_anonymous: bool,                    // Ý tưởng ẩn danh
+    #[serde(default)]
+    pub is_anonymous: bool,                    // Ý tưởng ẩn danh (thoát khỏi trách nhiệm)
     #[serde(deserialize_with = "deserialize_optional_uuid")]
     pub academic_year_id: Option<Uuid>,        // Năm học
     pub created_at: DateTime<Utc>,
@@ -523,11 +535,17 @@ pub struct Idea {
     #[serde(deserialize_with = "deserialize_optional_uuid")]
     pub approved_by: Option<Uuid>,
     pub rejection_reason: Option<String>,
+    #[serde(default)]
     pub votes_up: i32,
+    #[serde(default)]
     pub votes_down: i32,
-    pub view_count: i32,                       // Đếm lượt xem
-    pub comments_count: i32,
+    #[serde(default)]
+    pub view_count: i32,                       // Đếm lượt xem (tui muốn nhiều lên để khoe)
+    #[serde(default)]
+    pub comments_count: i32,                   // Số bình luận — nơi mọi người cà khịa
+    #[serde(default)]
     pub attachments: Vec<String>,
+    #[serde(default)]
     pub tags: Vec<String>,
 }
 
@@ -541,6 +559,7 @@ pub struct CreateIdeaRequest {
     pub is_anonymous: bool,                    // Ý tưởng ẩn danh
     pub terms_accepted: bool,                  // Chấp nhận điều khoản
     pub tags: Option<Vec<String>>,
+    pub attachments: Option<Vec<String>>,
 }
 
 #[derive(Debug, Serialize, Deserialize)]
@@ -559,7 +578,7 @@ pub struct IdeaResponse {
     pub category: String,
     pub status: String,
     pub creator_id: String,
-    pub creator_name: String,                  // Sẽ là "Anonymous" nếu is_anonymous
+    pub creator_name: String,                  // Sẽ là "Anonymous" nếu is_anonymous (copy-paste tuna)
     pub is_anonymous: bool,
     pub created_at: String,
     pub updated_at: String,
@@ -600,7 +619,7 @@ impl IdeaResponse {
 }
 
 
-// COMMENT MODEL - Schema bình luận (+ is_anonymous)
+// COMMENT MODEL - Schema bình luận (+ is_anonymous) — chỗ để trút nỗi lòng
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -612,11 +631,14 @@ pub struct Comment {
     #[serde(deserialize_with = "uuid_serde_string::deserialize")]
     pub author_id: Uuid,
     pub author_name: String,
-    pub is_anonymous: bool,                    // Bình luận ẩn danh
+    #[serde(default)]
+    pub is_anonymous: bool,                    // Bình luận ẩn danh (dám nói thật khi anonymous)
     pub content: String,
     pub created_at: DateTime<Utc>,
     pub updated_at: DateTime<Utc>,
+    #[serde(default)]
     pub likes: i32,
+    #[serde(default)]
     pub is_deleted: bool,
 }
 
@@ -660,7 +682,7 @@ impl CommentResponse {
     }
 }
 
-// VOTE MODEL - Đảm bảo mỗi user chỉ vote 1 lần/idea
+// VOTE MODEL - Đảm bảo mỗi user chỉ vote 1 lần/idea (nếu vote nhiều thì toggle thôi)
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq, Eq)]
 pub enum VoteType {
@@ -697,7 +719,7 @@ pub struct VoteRequest {
 }
 
 
-// CATEGORY MODEL - Danh mục ý tưởng
+// CATEGORY MODEL - Danh mục ý tưởng (chủ đề để mọi người rải giải pháp)
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -719,7 +741,7 @@ pub struct CreateCategoryRequest {
 }
 
 
-// PAGINATION
+// PAGINATION - phân trang cho đỡ nghẹt UI
 
 #[derive(Debug, Serialize, Deserialize)]
 pub struct PaginationParams {
@@ -750,7 +772,7 @@ impl<T> PaginatedResponse<T> {
 }
 
 
-// JWT CLAIMS - Dữ liệu trong token (+ department_id)
+// JWT CLAIMS - Dữ liệu trong token (+ department_id) — chứa quyền hạn và niềm tin
 
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -764,7 +786,7 @@ pub struct JwtClaims {
     pub iat: i64,                       // Phát hành lúc
 }
 
-// AUDIT LOG - Ghi chép hoạt động
+// AUDIT LOG - Ghi chép hoạt động (để mai còn tra cứu và đổ lỗi ai)
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
 pub struct AuditLog {

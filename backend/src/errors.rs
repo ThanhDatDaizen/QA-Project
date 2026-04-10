@@ -1,11 +1,7 @@
 /**
- * ICMS Error Handling System
- * 
- * TuICMSError: Custom error type with business-specific context
- * This module provides personalized error handling for all application operations.
- * 
- * Pattern: Each error variant includes context about what failed and why,
- * making debugging and user feedback more meaningful.
+ * ICMS Error Handling — TuICMSError
+ * Viết kiểu sinh viên: lỗi có context, message dễ hiểu, và 1 câu than thở
+ * Mục tiêu: map các lỗi ứng dụng thành HTTP responses dễ hiểu (và có chỗ để blame)
  */
 
 use axum::{
@@ -16,10 +12,8 @@ use axum::{
 use serde_json::json;
 use std::fmt;
 
-/// Custom ICMS Error Type - TuICMSError
-/// 
-/// Replaces generic AppError with business-specific error variants.
-/// Each variant carries contextual information for better error reporting.
+/// TuICMSError - các variant lỗi của ứng dụng (có context để trả client)
+/// Ghi thêm tí drama để đọc log vui hơn
 #[derive(Debug, Clone)]
 pub enum TuICMSError {
     // Authentication & Authorization Errors
@@ -165,7 +159,7 @@ impl fmt::Display for TuICMSError {
 impl std::error::Error for TuICMSError {}
 
 /// Response implementation for TuICMSError
-/// Automatically converts errors to appropriate HTTP responses
+/// Automatically converts errors to appropriate HTTP responses (và thêm timestamp để khỏi tranh cãi)
 impl IntoResponse for TuICMSError {
     fn into_response(self) -> Response {
         let (status, error_code, message, details): (StatusCode, &str, String, String) = match &self {

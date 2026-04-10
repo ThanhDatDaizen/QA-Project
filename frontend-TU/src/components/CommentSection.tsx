@@ -5,7 +5,7 @@
 import React, { useState, useEffect } from 'react';
 import type { Comment } from '../api/tu-api-endpoints';
 import { ideasAPI } from '../api/tu-api-endpoints';
-import { Send, MessageCircle, Trash2 } from 'lucide-react';
+import { Send, MessageCircle, Trash2, Heart } from 'lucide-react';
 
 interface CommentSectionProps {
   ideaId: string;
@@ -18,6 +18,7 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
 }) => {
   const [comments, setComments] = useState<Comment[]>([]);
   const [newComment, setNewComment] = useState('');
+  const [isAnonymous, setIsAnonymous] = useState(false);
   const [loading, setLoading] = useState(true);
   const [posting, setPosting] = useState(false);
   const currentUserId = localStorage.getItem('userId');
@@ -29,8 +30,8 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
   const loadComments = async () => {
     try {
       console.log(`[TU-COMMENTS] 📥 Loading comments for ${ideaId}...`);
-      // For now, just initialize empty comments. Real API endpoint would be implemented on backend
-      setComments([]);
+      const response = await ideasAPI.getComments(ideaId);
+      setComments(response.data || []);
       console.log(`[TU-COMMENTS] ✅ Loaded comments`);
     } catch (error) {
       console.error('[TU-COMMENTS] ❌ Load failed:', error);
@@ -48,11 +49,12 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
     setPosting(true);
     try {
       console.log('[TU-COMMENTS] 💬 Posting comment...');
-      const response = await ideasAPI.addComment(ideaId, newComment);
+      const response = await ideasAPI.addComment(ideaId, newComment, isAnonymous);
 
       if (response.data) {
         setComments([...comments, response.data]);
         setNewComment('');
+        setIsAnonymous(false);
         console.log('[TU-COMMENTS] ✅ Posted');
       }
     } catch (error) {
@@ -60,6 +62,27 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
       alert('❌ Đăng nhận xét thất bại!');
     } finally {
       setPosting(false);
+    }
+  };
+
+  const handleLikeComment = async (commentId: string) => {
+    try {
+      // Ưu tiên truyền UUID (_id) nếu có, nếu không thì dùng id
+      const comment = comments.find(c => c.id === commentId || c._id === commentId);
+      const uuid = comment?._id || comment?.id || commentId;
+      console.log(`[TU-COMMENTS] ❤️ Liking comment ${uuid}...`);
+      const response = await ideasAPI.likeComment(ideaId, uuid);
+
+      setComments(comments.map((c) => {
+        const idToMatch = c._id || c.id;
+        if (idToMatch === uuid) {
+          return { ...c, likes: response.data?.likes || (c.likes || 0) + 1 };
+        }
+        return c;
+      }));
+      console.log('[TU-COMMENTS] ✅ Liked');
+    } catch (error) {
+      console.error('[TU-COMMENTS] ❌ Like failed:', error);
     }
   };
 
@@ -71,7 +94,7 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
       console.log(`[TU-COMMENTS] 🗑️ Deleting ${commentId}...`);
       // Assuming there's a delete endpoint; if not, simulate it
       // await ideasAPI.deleteComment(ideaId, commentId);
-      setComments(comments.filter((c) => c._id !== commentId));
+      setComments(comments.filter((c) => (c.id || c._id) !== commentId));
       alert('✅ Đã xóa!');
     } catch (error) {
       console.error('[TU-COMMENTS] ❌ Delete failed:', error);
@@ -88,7 +111,7 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
   }
 
   return (
-    <div className="space-y-4">
+    <div id="comments" className="space-y-4 px-4 sm:px-0">
       {/* Header */}
       <div className="flex items-center gap-2">
         <MessageCircle size={20} className="text-cyan-400" />
@@ -97,7 +120,7 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
 
       {/* Comment Form - Only show if not readOnly */}
       {!readOnly && (
-        <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-4 space-y-3">
+        <div className="bg-slate-900/50 border border-slate-700 rounded-lg p-3 sm:p-4 space-y-3">
           <textarea
             value={newComment}
             onChange={(e) => setNewComment(e.target.value)}
@@ -106,14 +129,26 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
             rows={3}
             disabled={posting}
           />
-          <button
-            onClick={handlePostComment}
-            disabled={posting || !newComment.trim()}
-            className="flex items-center justify-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-slate-600 text-white rounded font-medium transition-colors"
-          >
-            <Send size={16} />
-            {posting ? 'Đang gửi...' : 'Gửi nhận xét'}
-          </button>
+          <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between">
+            <label className="flex items-center gap-2 text-sm text-slate-300 hover:text-white cursor-pointer transition-colors">
+              <input 
+                type="checkbox"
+                checked={isAnonymous}
+                onChange={(e) => setIsAnonymous(e.target.checked)}
+                disabled={posting}
+                className="w-4 h-4 rounded border-slate-600 text-cyan-600 focus:ring-cyan-500 bg-slate-900"
+              />
+              Bình luận ẩn danh (Ẩn tên thật)
+            </label>
+            <button
+              onClick={handlePostComment}
+              disabled={posting || !newComment.trim()}
+              className="flex items-center justify-center gap-2 px-4 py-2 bg-cyan-600 hover:bg-cyan-700 disabled:bg-slate-600 text-white rounded font-medium transition-colors"
+            >
+              <Send size={16} />
+              {posting ? 'Đang gửi...' : 'Gửi nhận xét'}
+            </button>
+          </div>
         </div>
       )}
 
@@ -124,11 +159,11 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
         ) : (
           comments.map((comment) => (
             <div
-              key={comment._id}
-              className="bg-slate-900/50 border border-slate-700 rounded-lg p-4"
-            >
+                key={comment.id || comment._id}
+                className="bg-slate-900/50 border border-slate-700 rounded-lg p-3 sm:p-4"
+              >
               {/* Header */}
-              <div className="flex items-start justify-between mb-2">
+                <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-2">
                 <div>
                   <p className="font-bold text-white">
                     {comment.author_name || 'Ẩn danh'}
@@ -137,15 +172,25 @@ export const CommentSection: React.FC<CommentSectionProps> = ({
                     {new Date(comment.created_at).toLocaleString('vi-VN')}
                   </p>
                 </div>
-                {currentUserId === comment.author_id && !readOnly && (
+                  <div className="flex items-center gap-2">
                   <button
-                    onClick={() => handleDeleteComment(comment._id)}
-                    className="p-1 hover:bg-slate-800 rounded transition-colors"
-                    title="Xóa nhận xét"
+                    onClick={() => handleLikeComment(comment.id || comment._id)}
+                    className="flex items-center gap-1 p-1 hover:bg-slate-800 rounded transition-colors text-slate-400 hover:text-rose-500"
+                    title="Thích"
                   >
-                    <Trash2 size={16} className="text-red-500" />
+                    <Heart size={14} className={comment.likes > 0 ? "fill-rose-500 text-rose-500" : ""} />
+                    <span className="text-xs">{comment.likes || 0}</span>
                   </button>
-                )}
+                  {currentUserId === comment.author_id && !readOnly && (
+                    <button
+                        onClick={() => handleDeleteComment(comment.id || comment._id)}
+                        className="p-1 sm:p-2 hover:bg-slate-800 rounded transition-colors"
+                      title="Xóa nhận xét"
+                    >
+                      <Trash2 size={16} className="text-red-500" />
+                    </button>
+                  )}
+                </div>
               </div>
 
               {/* Content */}

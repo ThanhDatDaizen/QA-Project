@@ -15,10 +15,10 @@ use crate::{
 };
 
 // ============================================================
-// 📅 ACADEMIC YEAR HANDLERS
+// ACADEMIC YEAR HANDLERS - quản lý năm học & hạn nộp (closure)
 // ============================================================
 
-/// 📌 Lấy danh sách tất cả Academic Years
+/// Lấy danh sách tất cả Academic Years (để xem còn deadline nào không)
 pub async fn list_academic_years(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<AcademicYearResponse>>, StatusCode> {
@@ -36,7 +36,7 @@ pub async fn list_academic_years(
     }
 }
 
-/// 📌 Lấy Academic Year hiện tại (là active)
+/// Lấy academic year đang active (nếu có) — active = đang nhận ý tưởng, đừng nộp trễ
 pub async fn get_active_academic_year(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<AcademicYearResponse>, StatusCode> {
@@ -52,7 +52,7 @@ pub async fn get_active_academic_year(
     }
 }
 
-/// 📌 Lấy chi tiết 1 Academic Year
+/// Lấy chi tiết 1 academic year theo id (đừng quên convert UUID trước khi gọi)
 pub async fn get_academic_year(
     State(state): State<Arc<AppState>>,
     Path(year_id): Path<Uuid>,
@@ -69,7 +69,7 @@ pub async fn get_academic_year(
     }
 }
 
-/// 📌 Tạo Academic Year mới (Admin/SuperAdmin only)
+/// Tạo academic year mới (Admin/SuperAdmin) — nhớ kiểm tra closure_date trước khi tạo
 pub async fn create_academic_year(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CreateAcademicYearRequest>,
@@ -94,7 +94,7 @@ pub async fn create_academic_year(
     }
 }
 
-/// 📌 Cập nhật Academic Year
+/// Cập nhật academic year (chỉ update các trường cho phép)
 pub async fn update_academic_year(
     State(state): State<Arc<AppState>>,
     Path(year_id): Path<Uuid>,
@@ -102,43 +102,75 @@ pub async fn update_academic_year(
 ) -> Result<Json<AcademicYearResponse>, StatusCode> {
     let collection = state.db.collection::<AcademicYear>("academic_years");
     
-    // Lấy academic year hiện tại
+    // Lấy academic year hiện tại từ DB
     let existing = collection
         .find_one(doc! { "_id": year_id.to_string() }, None)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    // Cập nhật các trường có giá trị
-    let updated_year = AcademicYear {
-        id: existing.id,
-        name: payload.name.unwrap_or(existing.name),
-        start_date: payload.start_date.unwrap_or(existing.start_date),
-        end_date: payload.end_date.unwrap_or(existing.end_date),
-        closure_date: payload.closure_date.unwrap_or(existing.closure_date),
-        final_closure_date: payload.final_closure_date.unwrap_or(existing.final_closure_date),
-        is_active: payload.is_active.unwrap_or(existing.is_active),
-        created_at: existing.created_at,
-        updated_at: Utc::now(),
+    // Tạo $set update để không chạm tới `_id` (immutable) — lạy cụ tổ MongoDB
+    let name = payload.name.clone().unwrap_or(existing.name.clone());
+    let start_date_str = payload
+        .start_date
+        .map(|d| d.to_string())
+        .unwrap_or(existing.start_date.to_string());
+    let end_date_str = payload
+        .end_date
+        .map(|d| d.to_string())
+        .unwrap_or(existing.end_date.to_string());
+    let closure_date_str = payload
+        .closure_date
+        .map(|d| d.to_rfc3339())
+        .unwrap_or(existing.closure_date.to_rfc3339());
+    let final_closure_date_str = payload
+        .final_closure_date
+        .map(|d| d.to_rfc3339())
+        .unwrap_or(existing.final_closure_date.to_rfc3339());
+    let is_active = payload.is_active.unwrap_or(existing.is_active);
+
+    let update_doc = doc! {
+        "$set": {
+            "name": name.clone(),
+            "start_date": start_date_str.clone(),
+            "end_date": end_date_str.clone(),
+            "closure_date": closure_date_str.clone(),
+            "final_closure_date": final_closure_date_str.clone(),
+            "is_active": is_active,
+            "updated_at": Utc::now().to_rfc3339(),
+        }
     };
 
     match collection
-        .replace_one(doc! { "_id": year_id.to_string() }, &updated_year, None)
+        .update_one(doc! { "_id": year_id.to_string() }, update_doc, None)
         .await
     {
-        Ok(_) => Ok(Json(AcademicYearResponse::from_academic_year(&updated_year))),
-        Err(_) => Err(StatusCode::INTERNAL_SERVER_ERROR),
+        Ok(_) => {
+            // Trả về document mới nhất sau khi update
+            let updated = collection
+                .find_one(doc! { "_id": year_id.to_string() }, None)
+                .await
+                .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
+                .ok_or(StatusCode::NOT_FOUND)?;
+
+            Ok(Json(AcademicYearResponse::from_academic_year(&updated)))
+        }
+        Err(e) => {
+            tracing::error!(%year_id, "Failed to update academic_year (update_one error): {:#?}", e);
+            eprintln!("[ACADEMIC_YEAR][ERROR] update_one failed for {}: {:?}", year_id, e);
+            Err(StatusCode::INTERNAL_SERVER_ERROR)
+        }
     }
 }
 
-/// 📌 Kích hoạt Academic Year (đặt là is_active=true, tắt cái cũ)
+/// Kích hoạt academic year: đặt is_active=true và tắt các record cũ (hết hạn old ones)
 pub async fn activate_academic_year(
     State(state): State<Arc<AppState>>,
     Path(year_id): Path<Uuid>,
 ) -> Result<Json<AcademicYearResponse>, StatusCode> {
     let collection = state.db.collection::<AcademicYear>("academic_years");
     
-    // Tắt tất cả academic year cũ
+    // Tắt các academic year cũ trước khi bật cái mới
     collection
         .update_many(doc! { "is_active": true }, doc! { "$set": { "is_active": false } }, None)
         .await
@@ -158,7 +190,7 @@ pub async fn activate_academic_year(
     Ok(Json(AcademicYearResponse::from_academic_year(&updated)))
 }
 
-/// 📌 Xóa Academic Year (chỉ nếu không có ideas)
+/// Xóa academic year (chỉ khi không có idea thuộc năm này) — nếu có idea thì thôi đừng xóa
 pub async fn delete_academic_year(
     State(state): State<Arc<AppState>>,
     Path(year_id): Path<Uuid>,

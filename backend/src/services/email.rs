@@ -1,8 +1,9 @@
 use tracing::info;
 
 // ============================================================
-// 📧 EMAIL SERVICE - PRODUCTION & STUB MODES
+// EMAIL SERVICE - Dịch vụ gửi mail (stub / SMTP)
 // ============================================================
+// Thắp nhang cho SMTP chạy. Hàng về: true = gửi thật, false = giả lập (đỡ đau tim).
 
 #[derive(Debug, Clone)]
 pub struct EmailConfig {
@@ -12,7 +13,7 @@ pub struct EmailConfig {
     pub from_name: String,
     pub username: Option<String>,
     pub password: Option<String>,
-    pub use_smtp: bool,  // true = use real SMTP, false = stub only
+    pub use_smtp: bool,  // true = gửi thật, false = stub (tạm cho deadline)
 }
 
 impl EmailConfig {
@@ -40,16 +41,17 @@ impl EmailConfig {
     }
     
     pub fn is_configured(&self) -> bool {
+        // Nếu thiếu username/password thì thôi đừng cố gửi thật
         self.username.is_some() && self.password.is_some()
     }
 }
 
-// Singleton config
+// Singleton config - đọc env một lần, cầu may lần sau
 lazy_static::lazy_static! {
     pub static ref EMAIL_CONFIG: EmailConfig = EmailConfig::from_env();
 }
 
-/// 📧 Email body builder
+/// Email body builder (plain + optional html) — viết nhanh kiểu copy-paste
 #[derive(Debug, Clone)]
 pub struct EmailBody {
     pub subject: String,
@@ -128,7 +130,7 @@ impl EmailBody {
             format!("❌ Ý tưởng bị từ chối: {}", idea_title)
         };
 
-        let reason_text = reason.unwrap_or("Không có nhận xét");
+        let reason_text = reason.unwrap_or("Không có nhận xét (chắc do deadline)");
 
         Self {
             subject,
@@ -159,13 +161,13 @@ impl EmailBody {
     }
 }
 
-/// 📧 Send email (stub + SMTP support)
+/// Gửi email (stub mode hoặc SMTP nếu cấu hình) — không sửa logic, chỉ bình luận
 pub async fn send_email(
     recipient_email: &str,
     recipient_name: &str,
     body: EmailBody,
 ) -> Result<(), String> {
-    // Always log
+    // Luôn log để debug
     info!(
         "📧 [EMAIL] Sending to {}\n  \
         To: {}\n  \
@@ -173,11 +175,11 @@ pub async fn send_email(
         recipient_name, recipient_email, body.subject
     );
 
-    // If SMTP is enabled and configured, try to send via SMTP
+    // Nếu SMTP bật và config đầy đủ thì gửi thật, không thì stub (hy vọng đừng lỗi)
     if EMAIL_CONFIG.use_smtp && EMAIL_CONFIG.is_configured() {
         send_via_smtp(recipient_email, recipient_name, &body).await?;
     } else {
-        // Fallback to stub
+        // Fallback: in ra log, mô phỏng gửi email
         info!(
             "ℹ️ [EMAIL STUB] Using stub mode (SMTP disabled or not configured)\n  \
             To: {}\n  \
@@ -185,7 +187,7 @@ pub async fn send_email(
             recipient_email, body.plain_text
         );
         
-        // Simulate async operation
+        // Simulate async gửi (không block) — múa tí cho ảo
         let email_to = recipient_email.to_string();
         let name_to = recipient_name.to_string();
         tokio::spawn(async move {
@@ -200,14 +202,13 @@ pub async fn send_email(
     Ok(())
 }
 
-/// 📧 Send via real SMTP (production)
+/// Gửi email qua SMTP (placeholder, dùng lettre trong production)
 async fn send_via_smtp(
     recipient_email: &str,
     recipient_name: &str,
     body: &EmailBody,
 ) -> Result<(), String> {
-    // This is a placeholder - in production, use lettre or similar crate
-    // For now, just log that we would send via SMTP
+    // Đây là placeholder - production thì xịn hơn (lettre), ở đây tui chỉ log
     info!(
         "📧 [SMTP] Would send email via SMTP\n  \
         Host: {}:{}\n  \

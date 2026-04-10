@@ -44,8 +44,8 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
   // State Management
   // ========================================
   const { user } = useTuIdentity();
-  const { ideaId: paramIdeaId } = useParams<{ ideaId: string }>();
-  const finalIdeaId = propIdeaId || paramIdeaId || '';
+  const { id: paramId } = useParams<{ id: string }>(); // Use 'id' from path "/ideas/:id"
+  const finalIdeaId = propIdeaId || paramId || '';
 
   const [idea, setIdea] = useState<Idea | null>(null);
   const [loading, setLoading] = useState(true);
@@ -67,10 +67,16 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
   // Load Idea Details
   // ========================================
   useEffect(() => {
-    loadIdea();
+    if (finalIdeaId) {
+      loadIdea();
+    } else {
+      setError("Idea ID is missing in URL");
+      setLoading(false);
+    }
   }, [finalIdeaId]);
 
   const loadIdea = async () => {
+    if (!finalIdeaId) return;
     try {
       console.log(`[TU-IDEA-DETAIL] 📥 Loading idea ${finalIdeaId}...`);
       setLoading(true);
@@ -90,6 +96,10 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
     }
   };
 
+  // Normalize ID field - backend may return `id` instead of `_id`
+  const ideaUid = idea ? ((idea as any)._id || (idea as any).id || '') : '';
+  const shortIdeaId = ideaUid ? ideaUid.substring(0, 8) : '';
+
   // ========================================
   // Power Level Checker
   // ========================================
@@ -104,10 +114,10 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
     if (!idea) return;
 
     try {
-      console.log(`[TU-IDEA-DETAIL] ✅ Approving idea ${idea._id}...`);
+      console.log(`[TU-IDEA-DETAIL] ✅ Approving idea ${ideaUid}...`);
       setApproving(true);
 
-      const response = await ideasAPI.approve(idea._id);
+      const response = await ideasAPI.approve(ideaUid);
       console.log('[TU-IDEA-DETAIL] ✅ Idea approved:', response.data);
 
       alert('✅ Ý tưởng đã được phê duyệt!');
@@ -127,10 +137,10 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
     }
 
     try {
-      console.log(`[TU-IDEA-DETAIL] ❌ Rejecting idea ${idea._id}...`);
+      console.log(`[TU-IDEA-DETAIL] ❌ Rejecting idea ${ideaUid}...`);
       setRejecting(true);
 
-      const response = await ideasAPI.reject(idea._id, rejectionReason);
+      const response = await ideasAPI.reject(ideaUid, rejectionReason);
       console.log('[TU-IDEA-DETAIL] ✅ Idea rejected:', response.data);
 
       alert(`✅ Ý tưởng đã bị từ chối.\nLý do: ${rejectionReason}`);
@@ -152,11 +162,11 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
     if (!idea) return;
 
     try {
-      console.log(`[TU-IDEA-DETAIL] 👍 Voting ${voteType} for idea ${idea._id}...`);
+      console.log(`[TU-IDEA-DETAIL] 👍 Voting ${voteType} for idea ${ideaUid}...`);
       setVoting(true);
 
       const voteValue = voteType === 'like' ? 1 : -1;
-      const response = await ideasAPI.vote(idea._id, voteValue);
+      const response = await ideasAPI.vote(ideaUid, voteValue);
       console.log('[TU-IDEA-DETAIL] ✅ Vote recorded:', response.data);
 
       // Vote response doesn't include full idea, just update votes_count
@@ -179,10 +189,10 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
     }
 
     try {
-      console.log(`[TU-IDEA-DETAIL] 💬 Adding comment to idea ${idea._id}...`);
+      console.log(`[TU-IDEA-DETAIL] 💬 Adding comment to idea ${ideaUid}...`);
       setCommenting(true);
 
-      const response = await ideasAPI.addComment(idea._id, commentText);
+      const response = await ideasAPI.addComment(ideaUid, commentText);
       console.log('[TU-IDEA-DETAIL] ✅ Comment added:', response.data);
 
       // Comment response is Comment object, not Idea - just increment comments_count
@@ -221,10 +231,10 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
     if (!confirmed) return;
 
     try {
-      console.log(`[TU-IDEA-DETAIL] 🗑️ Deleting idea ${idea._id} permanently...`);
+      console.log(`[TU-IDEA-DETAIL] 🗑️ Deleting idea ${ideaUid} permanently...`);
       setDeletingIdea(true);
 
-      await ideasAPI.delete(idea._id);
+      await ideasAPI.delete(ideaUid);
       console.log('[TU-IDEA-DETAIL] ✅ Idea deleted');
 
       alert('✅ Ý tưởng đã bị xóa vĩnh viễn!');
@@ -279,10 +289,10 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
   // Main Render
   // ========================================
   return (
-    <div className="space-y-6 max-w-4xl mx-auto">
+    <div className="space-y-6 max-w-4xl mx-auto p-4 sm:p-6 w-full">
       {/* Header Section */}
-      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-lg p-6 border border-slate-700">
-        <div className="flex items-start justify-between mb-4">
+      <div className="bg-gradient-to-r from-slate-800 to-slate-900 rounded-lg p-4 sm:p-6 border border-slate-700">
+        <div className="flex flex-col sm:flex-row items-start sm:items-center justify-between mb-4">
           <div className="flex-1">
             <h1 className="text-3xl font-bold text-white mb-2">{idea.title}</h1>
             <div className="flex items-center gap-4 text-slate-400 text-sm flex-wrap">
@@ -296,7 +306,7 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
               </div>
               <div className="flex items-center gap-1">
                 <FileText size={14} />
-                <span>ID: {idea._id.substring(0, 8)}...</span>
+                <span>ID: {shortIdeaId ? `${shortIdeaId}...` : 'N/A'}</span>
               </div>
             </div>
           </div>
@@ -319,12 +329,12 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
       </div>
 
       {/* Content Section */}
-      <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700">
+      <div className="bg-slate-800/50 rounded-lg p-4 sm:p-6 border border-slate-700">
         <h2 className="text-lg font-bold text-white mb-4">📋 Nội dung chi tiết</h2>
         <p className="text-slate-300 leading-relaxed mb-4">{idea.description}</p>
 
         {/* Department & Category */}
-        <div className="grid grid-cols-2 gap-4 mb-4">
+        <div className="grid grid-cols-1 sm:grid-cols-2 gap-4 mb-4">
           {idea.department && (
             <div>
               <p className="text-sm text-slate-400 mb-1">📁 Phòng ban</p>
@@ -341,7 +351,7 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
 
         {/* Rejection Reason */}
         {idea.status === 'Rejected' && idea.rejection_reason && (
-          <div className="bg-red-900/20 border border-red-700 rounded-lg p-4 mt-4">
+          <div className="bg-red-900/20 border border-red-700 rounded-lg p-3 sm:p-4 mt-4">
             <p className="text-sm text-slate-400 mb-1">❌ Lý do từ chối</p>
             <p className="text-red-200">{idea.rejection_reason}</p>
           </div>
@@ -397,7 +407,7 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
 
       {/* 1️⃣ POWER 15+ (QAManager/Admin) - Approve/Reject */}
       {hasPower(15) && !readOnly && (
-        <div className="bg-gradient-to-r from-cyan-900/20 to-blue-900/20 rounded-lg p-6 border border-cyan-700">
+        <div className="bg-gradient-to-r from-cyan-900/20 to-blue-900/20 rounded-lg p-4 sm:p-6 border border-cyan-700">
           <h3 className="text-lg font-bold text-white mb-4">✅ Phê duyệt / ❌ Từ chối</h3>
 
           {!showRejectForm ? (
@@ -405,7 +415,7 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
               <button
                 onClick={handleApprove}
                 disabled={approving}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 text-white rounded-lg font-medium transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 sm:px-6 sm:py-3 bg-green-600 hover:bg-green-700 disabled:bg-slate-600 text-white rounded-lg font-medium transition-colors"
               >
                 <CheckCircle size={20} />
                 {approving ? 'Đang phê duyệt...' : 'Phê Duyệt'}
@@ -413,7 +423,7 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
               <button
                 onClick={() => setShowRejectForm(true)}
                 disabled={rejecting}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-red-600 hover:bg-red-700 disabled:bg-slate-600 text-white rounded-lg font-medium transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 sm:px-6 sm:py-3 bg-red-600 hover:bg-red-700 disabled:bg-slate-600 text-white rounded-lg font-medium transition-colors"
               >
                 <XCircle size={20} />
                 {rejecting ? 'Đang từ chối...' : 'Từ Chối'}
@@ -425,20 +435,20 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
                 value={rejectionReason}
                 onChange={(e) => setRejectionReason(e.target.value)}
                 placeholder="Nhập lý do từ chối..."
-                className="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 resize-none"
+                className="w-full px-3 py-2 sm:px-4 sm:py-3 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 resize-none"
                 rows={3}
               />
               <div className="flex gap-3">
                 <button
                   onClick={handleReject}
                   disabled={rejecting || !rejectionReason.trim()}
-                  className="flex-1 px-4 py-2 bg-red-600 hover:bg-red-700 disabled:bg-slate-600 text-white rounded-lg font-medium"
+                  className="flex-1 px-3 py-2 sm:px-4 sm:py-2 bg-red-600 hover:bg-red-700 disabled:bg-slate-600 text-white rounded-lg font-medium"
                 >
                   {rejecting ? 'Đang gửi...' : 'Xác Nhận Từ Chối'}
                 </button>
                 <button
                   onClick={() => setShowRejectForm(false)}
-                  className="flex-1 px-4 py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium"
+                  className="flex-1 px-3 py-2 sm:px-4 sm:py-2 bg-slate-700 hover:bg-slate-600 text-white rounded-lg font-medium"
                 >
                   Hủy
                 </button>
@@ -450,14 +460,14 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
 
       {/* 2️⃣ POWER 10 (QACoordinator) - Tag Management */}
       {user?.power === 10 && !readOnly && (
-        <div className="bg-gradient-to-r from-purple-900/20 to-pink-900/20 rounded-lg p-6 border border-purple-700">
+        <div className="bg-gradient-to-r from-purple-900/20 to-pink-900/20 rounded-lg p-4 sm:p-6 border border-purple-700">
           <h3 className="text-lg font-bold text-white mb-4">🏷️ Gán Nhãn</h3>
           <div className="flex flex-wrap gap-2">
             {['Bug', 'Feature', 'Enhancement', 'Documentation', 'Question'].map((tag) => (
               <button
                 key={tag}
                 onClick={() => handleTagToggle(tag)}
-                className={`px-4 py-2 rounded-lg font-medium transition-colors ${
+                className={`px-3 py-2 sm:px-4 rounded-lg font-medium transition-colors ${
                   selectedTags.includes(tag)
                     ? 'bg-purple-600 text-white'
                     : 'bg-slate-700 text-slate-300 hover:bg-slate-600'
@@ -482,13 +492,13 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
       {hasPower(5) && user?.power !== 10 && user?.power !== 20 && !readOnly && (
         <div className="space-y-4">
           {/* Vote Buttons */}
-          <div className="bg-gradient-to-r from-purple-900/20 to-blue-900/20 rounded-lg p-6 border border-purple-700">
+          <div className="bg-gradient-to-r from-purple-900/20 to-blue-900/20 rounded-lg p-4 sm:p-6 border border-purple-700">
             <h3 className="text-lg font-bold text-white mb-4">👍 Bình chọn ý tưởng</h3>
             <div className="flex gap-3">
               <button
                 onClick={() => handleVote('like')}
                 disabled={voting}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-green-600/30 hover:bg-green-600/50 disabled:bg-slate-600 border border-green-600 text-green-300 rounded-lg font-medium transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 sm:px-6 sm:py-3 bg-green-600/30 hover:bg-green-600/50 disabled:bg-slate-600 border border-green-600 text-green-300 rounded-lg font-medium transition-colors"
               >
                 <ThumbsUp size={20} />
                 {voting ? '...' : `👍 ${idea.votes_count || 0}`}
@@ -496,7 +506,7 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
               <button
                 onClick={() => handleVote('dislike')}
                 disabled={voting}
-                className="flex-1 flex items-center justify-center gap-2 px-6 py-3 bg-red-600/30 hover:bg-red-600/50 disabled:bg-slate-600 border border-red-600 text-red-300 rounded-lg font-medium transition-colors"
+                className="flex-1 flex items-center justify-center gap-2 px-4 py-2 sm:px-6 sm:py-3 bg-red-600/30 hover:bg-red-600/50 disabled:bg-slate-600 border border-red-600 text-red-300 rounded-lg font-medium transition-colors"
               >
                 <ThumbsDown size={20} />
                 {voting ? '...' : `👎 ${(idea.votes_count * -1) || 0}`}
@@ -505,7 +515,7 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
           </div>
 
           {/* Comment Form */}
-          <div className="bg-gradient-to-r from-blue-900/20 to-cyan-900/20 rounded-lg p-6 border border-blue-700">
+          <div className="bg-gradient-to-r from-blue-900/20 to-cyan-900/20 rounded-lg p-4 sm:p-6 border border-blue-700">
             <h3 className="text-lg font-bold text-white mb-4 flex items-center gap-2">
               <MessageCircle size={20} />
               Bình luận
@@ -514,13 +524,13 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
               value={commentText}
               onChange={(e) => setCommentText(e.target.value)}
               placeholder="Chia sẻ ý kiến của bạn về ý tưởng này..."
-              className="w-full px-4 py-3 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 resize-none mb-3"
+              className="w-full px-3 py-2 sm:px-4 sm:py-3 bg-slate-900 border border-slate-600 rounded-lg text-white placeholder-slate-500 resize-none mb-3"
               rows={3}
             />
             <button
               onClick={handleComment}
               disabled={commenting || !commentText.trim()}
-              className="flex items-center justify-center gap-2 px-6 py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white rounded-lg font-medium w-full transition-colors"
+              className="flex items-center justify-center gap-2 px-4 py-2 sm:px-6 sm:py-3 bg-blue-600 hover:bg-blue-700 disabled:bg-slate-600 text-white rounded-lg font-medium w-full transition-colors"
             >
               <MessageCircle size={18} />
               {commenting ? 'Đang gửi...' : 'Gửi Bình Luận'}
@@ -531,7 +541,7 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
 
       {/* 4️⃣ POWER 20 (SuperAdmin) - System Actions */}
       {hasPower(20) && !readOnly && (
-        <div className="bg-gradient-to-r from-red-900/20 to-orange-900/20 rounded-lg p-6 border border-red-700">
+        <div className="bg-gradient-to-r from-red-900/20 to-orange-900/20 rounded-lg p-4 sm:p-6 border border-red-700">
           <h3 className="text-lg font-bold text-red-300 mb-4 flex items-center gap-2">
             <AlertCircle size={20} />
             Hành động Quản trị Viên
@@ -555,7 +565,7 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
 
       {/* 5️⃣ POWER 1 (Viewer) - Read Only Message */}
       {user?.power === 1 && (
-        <div className="bg-slate-800/50 rounded-lg p-6 border border-slate-700 text-center">
+        <div className="bg-slate-800/50 rounded-lg p-4 sm:p-6 border border-slate-700 text-center">
           <Eye size={24} className="mx-auto mb-2 text-slate-400" />
           <p className="text-slate-300">👁️ Bạn có quyền xem chỉ. Không thể thực hiện các hành động khác.</p>
         </div>
@@ -563,7 +573,7 @@ export const IdeaDetail: React.FC<IdeaDetailProps> = ({ ideaId: propIdeaId, read
 
       {/* Info: Read Only Mode */}
       {readOnly && (
-        <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-4 text-blue-200 text-sm">
+        <div className="bg-blue-900/20 border border-blue-700 rounded-lg p-3 sm:p-4 text-blue-200 text-sm">
           ℹ️ Chế độ chỉ xem - Các hành động bị tắt
         </div>
       )}

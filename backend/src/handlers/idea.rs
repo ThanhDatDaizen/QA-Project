@@ -1,7 +1,7 @@
 ﻿// ============================================================
-// 💡 IDEA HANDLERS (Tú quản lý cấu hình ý tưởng)
+// IDEA HANDLERS - xử lý CRUD cho ý tưởng (Tú code khi deadline dí)
 // ============================================================
-// Personalization: Tú ghi chú, Tú kiểm soát!
+// Personal notes: code viết rõ ràng để tui còn hiểu lúc debug (hoặc giả vờ hiểu)
 
 use axum::{
     extract::{Path, State, Extension},
@@ -21,7 +21,7 @@ use crate::{
     AppState,
 };
 
-// Helper - UUID to BSON Binary
+// Helper - chuyển UUID sang BSON Binary để query _id (thắp nhang trước khi query)
 fn uuid_to_bson(id: &Uuid) -> mongodb::bson::Binary {
     mongodb::bson::Binary {
         subtype: BinarySubtype::Generic,
@@ -30,7 +30,7 @@ fn uuid_to_bson(id: &Uuid) -> mongodb::bson::Binary {
 }
 
 // ============================================================
-// ✏️ UPDATE IDEA - Tú cho sửa nếu là creator/admin
+// UPDATE IDEA - Creator hoặc admin có thể sửa (đổi tí rồi submit)
 // ============================================================
 
 pub async fn update_idea(
@@ -47,7 +47,7 @@ pub async fn update_idea(
         .map_err(|_| internal_error_response("Database error"))?
         .ok_or_else(|| not_found_response("Idea"))?;
 
-    // Check quyền
+    // Kiểm tra quyền (creator hoặc permission) — nếu không thì xin phép sếp
     let is_creator = idea.creator_id.to_string() == claims.sub;
     if is_creator && !has_permission(&claims, Permission::UpdateOwnIdea) {
         return Err(forbidden_response());
@@ -55,7 +55,7 @@ pub async fn update_idea(
         return Err(forbidden_response());
     }
 
-    // Update fields
+    // Áp dụng các field được gửi lên (chỉ update mấy field được phép)
     if let Some(title) = payload.title {
         idea.title = title;
     }
@@ -83,7 +83,7 @@ pub async fn update_idea(
 }
 
 // ============================================================
-// 🗑️ DELETE IDEA - Xóa ý tưởng
+// DELETE IDEA - Xóa ý tưởng (và cleanup votes/comments)
 // ============================================================
 
 pub async fn delete_idea(
@@ -99,7 +99,7 @@ pub async fn delete_idea(
         .map_err(|_| internal_error_response("Database error"))?
         .ok_or_else(|| not_found_response("Idea"))?;
 
-    // Check quyền
+    // Kiểm tra quyền (creator hoặc permission)
     let is_creator = idea.creator_id.to_string() == claims.sub;
     if is_creator && !has_permission(&claims, Permission::DeleteOwnIdea) {
         return Err(forbidden_response());
@@ -112,13 +112,13 @@ pub async fn delete_idea(
         .await
         .map_err(|_| internal_error_response("Failed to delete idea"))?;
 
-    // Xóa votes liên quan
+    // Xóa votes liên quan (cleanup) — làm nhẹ DB, đỡ bực mình
     state.db.collection::<Vote>("votes")
         .delete_many(doc! { "idea_id": uuid_to_bson(&idea_id) }, None)
         .await
         .ok();
 
-    // Xóa comments liên quan
+    // Xóa comments liên quan (cleanup) — bình luận cay cú sẽ đi theo
     state.db.collection::<Comment>("comments")
         .delete_many(doc! { "idea_id": uuid_to_bson(&idea_id) }, None)
         .await
@@ -136,7 +136,7 @@ pub async fn delete_idea(
 }
 
 // ============================================================
-// 📂 CATEGORY MANAGEMENT - Quản lý danh mục
+// CATEGORY MANAGEMENT - lấy / tạo / xóa danh mục
 // ============================================================
 
 pub async fn get_categories(

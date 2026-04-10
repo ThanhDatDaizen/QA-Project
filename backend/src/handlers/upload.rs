@@ -9,7 +9,7 @@ use uuid::Uuid;
 use crate::AppState;
 
 // ============================================================
-// 📤 FILE UPLOAD HANDLER
+// FILE UPLOAD HANDLER - xử lý multipart uploads (thắp nhang cho attachment)
 // ============================================================
 
 #[derive(serde::Serialize)]
@@ -20,16 +20,13 @@ pub struct UploadResponse {
     pub file_size: u64,
 }
 
-/// 📤 POST /api/upload - Upload single file
-/// Content-Type: multipart/form-data
-/// Field name: "file"
-///
-/// Returns: 200 OK + UploadResponse
+/// POST /api/upload - Upload file (multipart/form-data)
+/// Field name: "file". Trả về `UploadResponse` khi thành công. Viết vội, nếu fail thì mai fix.
 pub async fn upload_file(
     mut multipart: Multipart,
 ) -> Result<Json<UploadResponse>, (StatusCode, Json<serde_json::Value>)> {
     
-    // Ensure uploads directory exists
+    // Ensure uploads directory exists (tạo nếu chưa có) — thắp nhang cho folder
     let upload_dir = "uploads";
     if !std::path::Path::new(upload_dir).exists() {
         fs::create_dir_all(upload_dir)
@@ -69,7 +66,7 @@ pub async fn upload_file(
                 .unwrap_or("unnamed")
                 .to_string();
 
-            // Generate unique filename
+            // Tạo tên file duy nhất (unique để khỏi đè nhau lúc ai upload cùng tên)
             let file_ext = std::path::Path::new(&original_name)
                 .extension()
                 .and_then(|ext| ext.to_str())
@@ -83,7 +80,7 @@ pub async fn upload_file(
 
             let file_path = format!("{}/{}", upload_dir, unique_filename);
 
-            // Read file content
+            // Đọc nội dung file — nếu không đọc được thì lỗi do internet quỵ
             let data = field.bytes().await.map_err(|_| {
                 (
                     StatusCode::BAD_REQUEST,
@@ -97,7 +94,7 @@ pub async fn upload_file(
 
             let file_size = data.len() as u64;
 
-            // Check file size limit (50MB)
+            // Kiểm tra giới hạn kích thước (50MB) — nếu lớn quá thì thôi nhé
             if file_size > 50 * 1024 * 1024 {
                 return Err((
                     StatusCode::BAD_REQUEST,
@@ -109,7 +106,7 @@ pub async fn upload_file(
                 ));
             }
 
-            // Write file to disk
+            // Ghi file ra disk (hy vọng disk không full)
             fs::write(&file_path, &data)
                 .await
                 .map_err(|_| {
@@ -149,7 +146,8 @@ pub async fn upload_file(
     ))
 }
 
-/// 📤 POST /api/ideas/with-attachment - Create Idea với file đính kèm (multipart)
+/// POST /api/ideas/with-attachment - Tạo idea kèm file (multipart)
+/// (Gửi file kèm idea) Viết vội: nếu có lỗi thì blame multipart parser
 pub async fn create_idea_with_attachment(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<crate::models::JwtClaims>,
@@ -159,7 +157,7 @@ pub async fn create_idea_with_attachment(
     use chrono::Utc;
     use uuid::Uuid;
 
-    // Ensure uploads directory exists
+    // Ensure uploads directory exists — tạo nếu không có, thắp nhang folder uploads
     let upload_dir = "uploads";
     if !std::path::Path::new(upload_dir).exists() {
         fs::create_dir_all(upload_dir)
@@ -183,7 +181,7 @@ pub async fn create_idea_with_attachment(
     let mut terms_accepted = false;
     let mut attachments: Vec<String> = vec![];
 
-    // Parse multipart fields
+    // Parse multipart fields: title, description, category, file, v.v. — cầu trời parsing ổn
     loop {
         let field = match multipart.next_field().await {
             Ok(Some(f)) => f,
@@ -276,7 +274,7 @@ pub async fn create_idea_with_attachment(
         }
     }
 
-    // Validate required fields
+    // Validate các field bắt buộc — nếu thiếu thì thôi đừng gửi
     if title.is_empty() || description.is_empty() || category.is_empty() {
         return Err((
             StatusCode::BAD_REQUEST,
@@ -299,7 +297,7 @@ pub async fn create_idea_with_attachment(
         ));
     }
 
-    // Create idea
+    // Tạo object Idea
     let idea = Idea {
         id: Uuid::new_v4(),
         title,
@@ -330,7 +328,7 @@ pub async fn create_idea_with_attachment(
         tags: vec![],
     };
 
-    // Save to database
+    // Lưu idea vào DB
     state.db.collection::<Idea>("ideas")
         .insert_one(&idea, None)
         .await

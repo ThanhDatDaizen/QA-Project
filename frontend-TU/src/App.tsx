@@ -27,10 +27,12 @@ import { AccessControlPage } from './pages/superadmin/AccessControlPage';
 import { SystemLogsPage } from './pages/superadmin/SystemLogsPage';
 import { ServerSettingsPage } from './pages/superadmin/ServerSettingsPage';
 import { DepartmentManager } from './pages/superadmin/DepartmentManager';
+import AcademicYearsPage from './pages/AcademicYearsPage';
 import { QAManagerLayout } from './pages/qamanager/QAManagerLayout';
 import { DashboardQA } from './pages/qamanager/DashboardQA';
 import { CategoryManagement } from './pages/qamanager/CategoryManagement';
 import { ReportsQA } from './pages/qamanager/ReportsQA';
+import { IdeaReviewList } from './pages/qamanager/IdeaReviewList';
 import { IdeaReviewDetail } from './pages/qamanager/IdeaReviewDetail';
 import { ReportExportPage } from './pages/qamanager/ReportExportPage';
 import { StaffLayout } from './pages/staff/StaffLayout';
@@ -170,6 +172,7 @@ const AppRoutes: React.FC = () => {
         <Route path="logs" element={<SystemLogsPage />} />
         <Route path="settings" element={<ServerSettingsPage />} />
         <Route path="departments" element={<DepartmentManager />} />
+        <Route path="academic-years" element={<AcademicYearsPage />} />
       </Route>
 
       {/* 🛠️ ADMIN (Power 18) Dashboard */}
@@ -188,6 +191,7 @@ const AppRoutes: React.FC = () => {
         <Route path="logs" element={<SystemLogsPage />} />
         <Route path="settings" element={<ServerSettingsPage />} />
         <Route path="departments" element={<DepartmentManager />} />
+        <Route path="academic-years" element={<AcademicYearsPage />} />
       </Route>
 
       {/* 🎯 QA MANAGER (Power 15) Dashboard */}
@@ -202,7 +206,8 @@ const AppRoutes: React.FC = () => {
         <Route index element={<DashboardQA />} />
         <Route path="categories" element={<CategoryManagement />} />
         <Route path="reports" element={<ReportsQA />} />
-        <Route path="ideas/:ideaId" element={<IdeaReviewDetail />} />
+        <Route path="ideas" element={<IdeaReviewList />} />
+          <Route path="ideas/:ideaId" element={<IdeaReviewDetail />} />
         <Route path="export" element={<ReportExportPage />} />
       </Route>
 
@@ -317,8 +322,10 @@ function App() {
   return (
     <TuIdentityProvider>
       <Router>
-        <div style={{ width: '100vw', height: '100vh', display: 'flex', flexDirection: 'column', overflow: 'hidden', backgroundColor: '#0f0f1e', color: 'white' }}>
-          <AppRoutes />
+        <div className="min-h-screen flex flex-col bg-[#0f0f1e] text-white">
+          <div className="w-full px-4 sm:px-6 md:px-8 lg:px-12 py-4">
+            <AppRoutes />
+          </div>
         </div>
       </Router>
     </TuIdentityProvider>

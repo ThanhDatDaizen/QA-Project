@@ -38,6 +38,8 @@ export const SubmitIdea: React.FC = () => {
     agreeTerms: false,
   });
 
+  const [selectedFile, setSelectedFile] = useState<File | null>(null);
+
   const [errors, setErrors] = useState<{
     title?: string;
     description?: string;
@@ -126,6 +128,25 @@ export const SubmitIdea: React.FC = () => {
         .map(tag => tag.trim())
         .filter(tag => tag.length > 0);
 
+      let attachmentsList: string[] = [];
+      if (selectedFile) {
+        console.log('%c[TU-STAFF] 📤 Uploading attachment...', 'color: #0ea5e9;');
+        const uploadForm = new FormData();
+        uploadForm.append('file', selectedFile);
+        
+        const uploadRes = await axios.post(`${API_BASE}/upload`, uploadForm, {
+          headers: {
+            Authorization: `Bearer ${token}`,
+            'Content-Type': 'multipart/form-data',
+          },
+        });
+        
+        if (uploadRes.data?.file_path) {
+          attachmentsList.push(uploadRes.data.file_path);
+          console.log('✅ Attachment uploaded:', uploadRes.data.file_path);
+        }
+      }
+
       // Create JSON payload matching backend CreateIdeaRequest
       const submitData = {
         title: formData.title.trim(),
@@ -134,6 +155,7 @@ export const SubmitIdea: React.FC = () => {
         is_anonymous: formData.isAnonymous,
         terms_accepted: formData.agreeTerms,
         tags: tagsArray.length > 0 ? tagsArray : null,
+        attachments: attachmentsList.length > 0 ? attachmentsList : null,
       };
 
       console.log('📤 Sending JSON payload:', submitData);
@@ -162,6 +184,7 @@ export const SubmitIdea: React.FC = () => {
           isAnonymous: false,
           agreeTerms: false,
         });
+        setSelectedFile(null);
         setIsSubmitted(false);
       }, 3000);
     } catch (error: any) {
@@ -338,17 +361,20 @@ export const SubmitIdea: React.FC = () => {
             rows={6}
           />
 
-          {/* Expected Benefit */}
-          <TextareaField
-            label="Detailed Description"
-            name="description"
-            placeholder="Describe your idea in detail. What problem does it solve? How would it work?"
-            required
-            error={errors.description as string}
-            value={formData.description}
-            onChange={handleInputChange}
-            rows={4}
-          />
+          {/* Attachments (Optional) */}
+          <div>
+            <label className="block text-sm font-medium text-white mb-2">
+              Supporting Document (Optional)
+            </label>
+            <input
+              type="file"
+              onChange={(e) => setSelectedFile(e.target.files?.[0] || null)}
+              className="w-full px-4 py-2 bg-slate-800 border-slate-700 border rounded-lg text-white file:mr-4 file:py-2 file:px-4 file:rounded-full file:border-0 file:text-sm file:font-semibold file:bg-purple-600 file:text-white hover:file:bg-purple-700 focus:outline-none transition-colors"
+            />
+            <p className="mt-2 text-xs text-slate-400">
+              Attach any supplementary documents, images, or presentations to support your idea (Max 50MB).
+            </p>
+          </div>
 
           {/* Tags */}
           <InputField

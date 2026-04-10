@@ -1,30 +1,25 @@
 /**
- * Custom Logging & Telemetry Module
- * 
- * TU-LOG: Personal logging system with structured events
+ * TU-LOG: Hệ thống log phong cách sinh viên "vắt chân lên cổ".
+ * Thắp nhang cầu nguyện cho hàm này chạy... Lạy cụ tổ Rust cho con qua đoạn này.
+ * Viết lúc 4h sáng, mắt đang nhắm mắt mở; nếu crash thì mai sửa (hoặc không).
  * Format: [TU-LOG] <timestamp> - <action> - <actor> - <context>
- * 
- * This personalized logging approach helps track:
- * - User actions (submissions, votes, approvals)
- * - System operations (DB queries, file operations)
- * - Security events (authentication, authorization)
- * - Performance metrics (query times, operation costs)
+ * Mục tiêu: log đủ để tui biết có bug hay chỉ do mất ngủ.
  */
 
 use chrono::Utc;
 
-/// Log action templates for consistent event tracking
+/// Mẫu log hành động — đọc nhanh biết chuyện gì vừa xảy ra (nếu còn mắt để đọc)
 #[derive(Debug, Clone)]
 pub struct ActionLog {
     pub action: String,
-    pub actor: String,           // User email or system identifier
-    pub resource_type: String,   // "submission", "vote", "comment", etc.
+    pub actor: String,           // Email user (hoặc 'người gửi yêu thương' khi anonymous)
+    pub resource_type: String,   // "submission", "vote", "comment", etc. - cổng này chỉ cho sếp vào
     pub resource_id: String,
     pub context: Option<String>, // Additional context
 }
 
-/// Structured event logging macro
-/// Usage: log_action!(action, actor, resource_type, resource_id, context)
+/// Macro log có cấu trúc, dùng như: log_action!(action, actor, resource, id, context)
+/// Viết khi muốn khoe log trước deadline, hoặc đổ lỗi cho mạng
 #[macro_export]
 macro_rules! log_action {
     ($action:expr, $actor:expr, $resource:expr, $id:expr) => {
@@ -52,8 +47,8 @@ macro_rules! log_action {
     };
 }
 
-/// Performance tracking macro
-/// Usage: log_perf!("operation_name", duration_ms, success)
+/// Macro theo dõi hiệu năng (đo ms). Gọi: log_perf!("op", ms, success)
+/// Borrow checker nó mắng tôi như con, nên tôi phải mượn (borrow) kiểu này mới xong
 #[macro_export]
 macro_rules! log_perf {
     ($operation:expr, $duration_ms:expr, $success:expr) => {
@@ -68,8 +63,7 @@ macro_rules! log_perf {
     };
 }
 
-/// Security event logging
-/// Usage: log_security!("event_type", "user", "details")
+/// Ghi event bảo mật — useful khi nghi ngờ token/permission (hoặc khi sếp test access)
 #[macro_export]
 macro_rules! log_security {
     ($event:expr, $user:expr, $details:expr) => {
@@ -83,8 +77,7 @@ macro_rules! log_security {
     };
 }
 
-/// Audit trail logging - For compliance and tracking
-/// Usage: log_audit!("operation", "user", "before", "after")
+/// Audit trail — để tui còn biết ai làm gì trên hệ thống (vì mai tranh luận với đồng đội)
 #[macro_export]
 macro_rules! log_audit {
     ($operation:expr, $user:expr, $details:expr) => {
@@ -98,8 +91,7 @@ macro_rules! log_audit {
     };
 }
 
-/// Debug logging with personal touch
-/// Usage: log_debug!("message", variable)
+/// Debug log — dành cho dev, in nhanh biến/obj (thích hợp khi đang vắt nỗi buồn deadline)
 #[macro_export]
 macro_rules! log_debug {
     ($msg:expr) => {
@@ -115,7 +107,7 @@ macro_rules! log_debug {
     };
 }
 
-/// Initialize logging with TU customization
+/// Khởi tạo logging theo style sinh viên: noisy, nhiều cảm xúc, ít ngủ
 pub fn init_tu_logging() {
     tracing_subscriber::fmt()
         .with_target(false)

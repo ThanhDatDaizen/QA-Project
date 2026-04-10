@@ -41,29 +41,30 @@ use features::{
     compress_submissions_archive,
 };
 
-// APP STATE - Hệ thống của Tú lưu trữ mọi thứ ở đây
+// APP STATE - Nơi Tú giữ state global của app (DB, v.v.)
+// Thắp nhang cho DB, nếu DB nổi giận thì gọi 2 tách cà phê cho nó
 
 pub struct AppState {
     pub db: Database,
 }
 
 
-// MAIN FUNCTION - "TIM" CỦA HỆ THỐNG TÚ
+// MAIN FUNCTION - Hàm `main` (Tui hay gọi đùa là TIM) — viết lúc 4h sáng
 
 #[tokio::main]
 async fn main() -> Result<(), Box<dyn std::error::Error>> {
-    // 🚀 Tú khởi động - chuẩn bị phục vụ
-    eprintln!("[STDERR] 🚀 Hệ thống của Tú bắt đầu khởi động...");
+    // 🚀 Khởi động server — chuẩn bị phục vụ (Thắp nhang, cầu cho route không lỗi)
+    eprintln!("[STDERR] 🚀 Backend khởi động...");
     
-    // Khởi tạo tracing/logging - Tú cần theo dõi mọi thứ!
+    // Init tracing/logging để mình có thông tin debug rõ ràng (và để đổ lỗi sau này)
     tracing_subscriber::fmt::init();
-    tracing::info!("🎯 Tracing system initialized - Tú sẵn sàng theo dõi mọi hoạt động!");
-    eprintln!("[STDERR] Logging system online - Tú không sợ lỗi!");
+    tracing::info!("Tracing system initialized - ready to debug");
+    eprintln!("[STDERR] Logging system online");
 
-    // Load environment variables
+    // Load biến môi trường từ .env — hy vọng .env không mất tích
     dotenv::dotenv().ok();
 
-    // Kết nối MongoDB - đây là "kho lưu trữ dữ liệu" của Tú
+    // Kết nối MongoDB - kho dữ liệu chính của app (nơi chứa mọi hy vọng)
     let mongodb_uri = std::env::var("MONGODB_URI")
         .unwrap_or_else(|_| "mongodb://admin:admin123@localhost:27017/icms_db?authSource=admin".to_string());
     
@@ -72,23 +73,23 @@ async fn main() -> Result<(), Box<dyn std::error::Error>> {
     let mongo_client = Client::with_uri_str(&mongodb_uri).await?;
     let db = mongo_client.database("icms_db");
 
-    // Khởi tạo database collections - nếu chưa có thì Tú tự tạo
+    // Tạo các collection nếu cần (chỉ tạo khi vắng mặt) — seed nếu cần
     initialize_database(&db).await?;
 
-    // Khởi động background tasks - Tú có việc phải làm trong background!
-    tracing::info!("🎯 Khởi động các background schedulers...");
+    // Start background tasks (ví dụ: auto-unban checker) — để khỏi thao tác thủ công
+    tracing::info!("Starting background schedulers...");
     scheduler::spawn_ban_expiration_checker(db.clone());
-    tracing::info!("⏰ Ban expiration checker đã schedule (chạy mỗi 5 phút)");
+    tracing::info!("Ban expiration checker scheduled (5m)");
 
     let app_state = Arc::new(AppState { db });
 
-    // Xây dựng router - bản đồ đường đi cho tất cả API endpoints
+    // Xây dựng router — map các endpoint API (tui vẽ roadmap bằng mắt)
     let app = build_router(app_state);
 
-    // Khởi động server - Tú lên sóng!
+    // Bind và chạy server — hy vọng port không bị ai chiếm
     let listener = tokio::net::TcpListener::bind("0.0.0.0:8080").await?;
-    eprintln!("[STDERR] 🎊 Server đã lắng nghe trên 0.0.0.0:8080 - Tú sẵn sàng!");
-    tracing::info!("✅ 🚀 Hệ thống của Tú đang chạy tại http://0.0.0.0:8080");
+    eprintln!("[STDERR] Server listening on 0.0.0.0:8080");
+    tracing::info!("Server running at http://0.0.0.0:8080");
 
     axum::serve(listener, app).await?;
     Ok(())
@@ -115,6 +116,8 @@ fn build_router(state: Arc<AppState>) -> Router {
         .route("/ideas/:id/reject", post(decline_initiative))
         .route("/ideas/:id/vote", post(add_assessment_vote))
         .route("/ideas/:id/comments", post(post_feedback_note))
+        .route("/ideas/:id/comments", get(crate::features::submissions::get_feedback_notes))
+        .route("/ideas/:id/comments/:comment_id/like", post(crate::features::submissions::like_feedback_note))
         // Category management
         .route("/categories", get(get_categories))
         .route("/categories", post(create_category))

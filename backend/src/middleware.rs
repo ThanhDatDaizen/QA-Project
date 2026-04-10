@@ -9,11 +9,10 @@ use jsonwebtoken::{decode, DecodingKey, Validation};
 use serde_json::json;
 use crate::models::{JwtClaims, Permission};
 
-// JWT UTILITY FUNCTIONS - Tiện ích xử lý token
+// JWT UTILS - Tiện ích token kiểu sinh viên: thắp nhang trước khi verify
 
-/// Kiểm tra và xác thực JWT token
-///  Nếu hợp lệ: trả về JwtClaims
-///  Nếu lỗi: trả về StatusCode::UNAUTHORIZED
+/// Kiểm tra và giải mã JWT
+/// Nếu ok trả `JwtClaims`, nếu không trả `UNAUTHORIZED` và chửi nhẹ
 pub async fn verify_jwt_token(token: &str) -> Result<JwtClaims, StatusCode> {
     let secret = std::env::var("JWT_SECRET")
         .unwrap_or_else(|_| "your_super_secret_jwt_key_change_in_production_12345".to_string());
@@ -23,14 +22,13 @@ pub async fn verify_jwt_token(token: &str) -> Result<JwtClaims, StatusCode> {
     match decode::<JwtClaims>(token, &decoding_key, &Validation::default()) {
         Ok(data) => Ok(data.claims),
         Err(_) => {
-            tracing::warn!("Failed to verify JWT token");
+            tracing::warn!("Failed to verify JWT token - token có vẻ giận dữ");
             Err(StatusCode::UNAUTHORIZED)
         }
     }
 }
 
-/// Trích xuất Bearer token từ Authorization header
-///  Tìm "Bearer <token>" trong header
+/// Lấy Bearer token từ header Authorization ("Bearer ...")
 pub fn extract_token(headers: &HeaderMap) -> Option<String> {
     headers
         .get(AUTHORIZATION)
@@ -44,11 +42,11 @@ pub fn extract_token(headers: &HeaderMap) -> Option<String> {
         })
 }
 
-//  MIDDLEWARE & AUTHENTICATION - Kiểm tra quyền truy cập
+// MIDDLEWARE & AUTHENTICATION - Guards cơ bản (vừa đủ để qua deadline)
 
 
-///  Middleware kiểm tra JWT token
-/// Tất cả request protectedphải có header Authorization với Bearer token hợp lệ
+/// Middleware kiểm tra JWT — mọi route bảo vệ cần header Authorization
+/// (Nếu không có token thì lạy cụ tổ, không cho vào)
 pub async fn auth_middleware(
     mut req: Request,
     next: Next,
@@ -60,12 +58,12 @@ pub async fn auth_middleware(
             match verify_jwt_token(&token).await {
                 Ok(claims) => {
                     // ✅ Token hợp lệ - lưu claims vào request extensions
-                    // Các handler có thể truy cập qua Extension<JwtClaims>
+                                        // Handlers đọc `Extension<JwtClaims>` để biết user (hoặc để blame)
                     req.extensions_mut().insert(claims);
                     Ok(next.run(req).await)
                 }
                 Err(_) => {
-                    // ❌ Token không hợp lệ hoặc hết hạn
+                    // ❌ Token không hợp lệ / hết hạn — có thể do cookie ăn ở xấu
                     Err((
                         StatusCode::UNAUTHORIZED,
                         Json(json!({
@@ -78,7 +76,7 @@ pub async fn auth_middleware(
             }
         }
         None => {
-            // ❌ Không có token trong header
+            // ❌ Không có token trong header — xin lỗi, không cho vào
             Err((
                 StatusCode::UNAUTHORIZED,
                 Json(json!({
@@ -92,32 +90,32 @@ pub async fn auth_middleware(
 }
 
 
-//  PERMISSION CHECKING - Kiểm tra quyền hạn
+// PERMISSION HELPERS - Kiểm tra quyền & role (để khỏi cho nhầm người vào phòng sếp)
 
-/// ✓ Kiểm tra xem user có quyền cụ thể không
-/// So sánh permissions trong JWT claims với Permission cần thiết
+/// Kiểm tra user có permission hay không (so sánh tên)
+/// Nếu không có thì 'thôi xong, hẻo rồi'
 pub fn has_permission(claims: &JwtClaims, permission: Permission) -> bool {
     let perm_str = permission.to_string();
     claims.permissions.iter().any(|p: &String| p == &perm_str)
 }
 
-/// ✓ Kiểm tra xem user có role cụ thể không
+/// Kiểm tra role của user (tú đi kiểm tra xem có phải boss không)
 pub fn has_role(claims: &JwtClaims, required_role: &str) -> bool {
     claims.role == required_role
 }
 
-/// ✓ Kiểm tra xem user có quyền Admin không
+/// Có phải Admin không? (Admin = được quyền 'múa tí cho nó ảo')
 pub fn is_admin(claims: &JwtClaims) -> bool {
     claims.role == "Admin"
 }
 
-/// ✓ Kiểm tra xem user có quyền Manager hoặc Admin không
+/// Manager hoặc Admin không?
 pub fn is_manager_or_admin(claims: &JwtClaims) -> bool {
     matches!(claims.role.as_str(), "Admin" | "Manager")
 }
 
-/// ✓ Kiểm tra xem user có thể chỉnh sửa ý tưởng không
-/// Logic: Hoặc là creator hoặc có quyền update_any_idea
+/// Kiểm tra user có thể sửa idea: creator hoặc permission phù hợp
+/// Borrow checker đừng can thiệp vào đây
 pub fn can_update_idea(claims: &JwtClaims, creator_id: &str) -> bool {
     if claims.sub == creator_id {
         has_permission(claims, Permission::UpdateOwnIdea)
@@ -126,8 +124,7 @@ pub fn can_update_idea(claims: &JwtClaims, creator_id: &str) -> bool {
     }
 }
 
-/// ✓ Kiểm tra xem user có thể xóa ý tưởng không
-/// Logic: Hoặc là creator hoặc có quyền delete_any_idea
+/// Kiểm tra user có thể xóa idea: creator hoặc permission phù hợp
 pub fn can_delete_idea(claims: &JwtClaims, creator_id: &str) -> bool {
     if claims.sub == creator_id {
         has_permission(claims, Permission::DeleteOwnIdea)
@@ -136,9 +133,9 @@ pub fn can_delete_idea(claims: &JwtClaims, creator_id: &str) -> bool {
     }
 }
 
-//  ERROR RESPONSE BUILDERS - Tạo response lỗi
+// ERROR RESPONSES - helper trả lỗi HTTP chuẩn (viết lời từ chối nhẹ nhàng)
 
-/// ❌ Lỗi Forbidden (403) - Không có quyền
+/// Forbidden (403) — không đủ quyền (cổng này chỉ cho sếp thôi)
 pub fn forbidden_response() -> (StatusCode, Json<serde_json::Value>) {
     (
         StatusCode::FORBIDDEN,
@@ -150,7 +147,7 @@ pub fn forbidden_response() -> (StatusCode, Json<serde_json::Value>) {
     )
 }
 
-/// ❌ Lỗi Bad Request (400) - ID không hợp lệ
+/// Bad Request (400) — ID không hợp lệ (uuid hoặc do bạn gõ vội)
 pub fn invalid_id_response() -> (StatusCode, Json<serde_json::Value>) {
     (
         StatusCode::BAD_REQUEST,
@@ -162,7 +159,7 @@ pub fn invalid_id_response() -> (StatusCode, Json<serde_json::Value>) {
     )
 }
 
-///  Lỗi Not Found (404) - Resource không tìm thấy
+/// Not Found (404) — resource không tồn tại (hoặc bị ai đó xóa mất)
 pub fn not_found_response(resource: &str) -> (StatusCode, Json<serde_json::Value>) {
     (
         StatusCode::NOT_FOUND,
@@ -174,7 +171,7 @@ pub fn not_found_response(resource: &str) -> (StatusCode, Json<serde_json::Value
     )
 }
 
-///  Lỗi Conflict (409) - Dữ liệu bị trùng
+/// Conflict (409) — xung đột dữ liệu
 pub fn conflict_response(message: &str) -> (StatusCode, Json<serde_json::Value>) {
     (
         StatusCode::CONFLICT,
@@ -186,7 +183,7 @@ pub fn conflict_response(message: &str) -> (StatusCode, Json<serde_json::Value>)
     )
 }
 
-///  Lỗi Internal Server Error (500) - Lỗi server
+/// Internal Server Error (500) — lỗi nội bộ (gửi tin nhắn cho dev kèm cà phê)
 pub fn internal_error_response(message: &str) -> (StatusCode, Json<serde_json::Value>) {
     (
         StatusCode::INTERNAL_SERVER_ERROR,
@@ -198,11 +195,11 @@ pub fn internal_error_response(message: &str) -> (StatusCode, Json<serde_json::V
     )
 }
 
-//  BAN STATUS MIDDLEWARE - Kiểm tra tài khoản bị khóa
+// BAN STATUS MIDDLEWARE - kiểm tra account bị ban (nếu bị, thôi chịu)
 
 
-///  Middleware kiểm tra xem user có bị khóa (ban) không
-/// Nếu bị khóa vĩnh viễn (ban_expires_at = null) hoặc còn thời hạn khóa → 403 Forbidden
+/// Middleware: chặn user bị ban (tạm thời hoặc vĩnh viễn)
+/// Nếu bị ban thì lạy cụ tổ, đợi hết hạn nhé
 pub async fn check_ban_status_middleware(
     axum::extract::State(state): axum::extract::State<std::sync::Arc<crate::AppState>>,
     req: Request,
@@ -214,12 +211,12 @@ pub async fn check_ban_status_middleware(
             
             let filter = mongodb::bson::doc! { "_id": mongodb::bson::to_bson(&user_uuid).unwrap_or(mongodb::bson::Bson::Null) };
             if let Ok(Some(user)) = users_collection.find_one(filter, None).await {
-                if user.is_banned {
+                    if user.is_banned {
                     if let Some(expires) = user.ban_expires_at {
                         if chrono::Utc::now() < expires {
                             return Err(banned_response(Some(expires)));
                         } else {
-                            // Auto unban
+                            // Auto unban nếu đã qua hạn
                             let update = mongodb::bson::doc! {
                                 "$set": {
                                     "is_banned": false,
@@ -233,7 +230,7 @@ pub async fn check_ban_status_middleware(
                             ).await;
                         }
                     } else {
-                        // Banned permanently
+                        // Bị khóa vĩnh viễn => trả lỗi (khóc 1 tí)
                         return Err(banned_response(None));
                     }
                 }
@@ -253,12 +250,12 @@ pub async fn check_ban_status_middleware(
     }
 }
 
-///  Banned user response (403)
+/// Trả về khi account bị banned (403)
 pub fn banned_response(ban_expires_at: Option<chrono::DateTime<chrono::Utc>>) -> (StatusCode, Json<serde_json::Value>) {
     let message = if let Some(expires) = ban_expires_at {
-        format!("Tài khoản của bạn bị khóa tạm thời đến {}", expires)
+        format!("Tài khoản của bạn bị khóa tạm thời đến {} (xin chờ)", expires)
     } else {
-        "Tài khoản của bạn bị khóa vĩnh viễn".to_string()
+        "Tài khoản của bạn bị khóa vĩnh viễn (thôi chịu)".to_string()
     };
 
     (
@@ -272,17 +269,16 @@ pub fn banned_response(ban_expires_at: Option<chrono::DateTime<chrono::Utc>>) ->
 }
 
 
-//  PERMISSION CHECK MIDDLEWARE - Kiểm tra quyền hạn cụ thể
+// PERMISSION GUARDS - kiểm tra quyền / role cho route
 
-/// Middleware kiểm tra xem user có quyền ManageSystem không
-/// Chỉ cho phép quyền ManageSystem thì mới được truy cập /admin/* routes
+/// Middleware: require ManageSystem permission để vào /admin/*
 pub async fn require_manage_system_permission(
     req: Request,
     next: Next,
 ) -> Result<impl IntoResponse, (StatusCode, Json<serde_json::Value>)> {
-    // Lấy claims từ request extensions (được thêm bởi auth_middleware)
+    // Lấy claims từ request extensions (auth_middleware đặt vào)
     if let Some(claims) = req.extensions().get::<crate::models::JwtClaims>().cloned() {
-        // Kiểm tra xem có quyền ManageSystem hoặc SystemAdmin (Cho Admin) không
+        // Kiểm tra ManageSystem / SystemAdmin
         if claims.permissions.contains(&"ManageSystem".to_string()) || claims.permissions.contains(&"SystemAdmin".to_string()) {
             Ok(next.run(req).await)
         } else {
@@ -347,7 +343,7 @@ mod tests {
 
     #[test]
     fn test_has_permission() {
-        let claims = JwtClaims {
+        let claims = JwtClaims { department_id: None,
             sub: "user123".to_string(),
             email: "user@example.com".to_string(),
             role: "Admin".to_string(),
@@ -356,13 +352,13 @@ mod tests {
             iat: 0,
         };
 
-        assert!(has_permission(&claims, Permission::create_idea));
-        assert!(!has_permission(&claims, Permission::approve_idea));
+        assert!(has_permission(&claims, Permission::CreateIdea));
+        assert!(!has_permission(&claims, Permission::ApproveIdea));
     }
 
     #[test]
     fn test_is_admin() {
-        let admin_claims = JwtClaims {
+        let admin_claims = JwtClaims { department_id: None,
             sub: "admin123".to_string(),
             email: "admin@example.com".to_string(),
             role: "Admin".to_string(),
@@ -371,7 +367,7 @@ mod tests {
             iat: 0,
         };
 
-        let viewer_claims = JwtClaims {
+        let viewer_claims = JwtClaims { department_id: None,
             sub: "viewer123".to_string(),
             email: "viewer@example.com".to_string(),
             role: "Viewer".to_string(),
@@ -386,7 +382,7 @@ mod tests {
 
     #[test]
     fn test_can_update_own_idea() {
-        let creator = JwtClaims {
+        let creator = JwtClaims { department_id: None,
             sub: "user123".to_string(),
             email: "user@example.com".to_string(),
             role: "Contributor".to_string(),

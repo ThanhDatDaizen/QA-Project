@@ -1,6 +1,5 @@
 
-//  BAN AUTO-EXPIRATION SCHEDULER - Kiểm tra và tự động mở khóa
-
+// BAN AUTO-EXPIRATION SCHEDULER - lạy cụ tổ, auto-unban nếu hết hạn
 
 use mongodb::{Database, bson::doc};
 use chrono::Utc;
@@ -9,8 +8,8 @@ use futures::StreamExt;
 use crate::models::User;
 use crate::handlers::auth::uuid_to_bson;
 
-/// Start background task to auto-unban expired bans
-/// Chạy mỗi 5 phút để kiểm tra và tự động mở khóa bị hạn
+/// Spawn background task: kiểm tra expired bans mỗi 5 phút
+/// Viết tắt: tui không muốn phải unban thủ công lúc 3h sáng
 pub fn spawn_ban_expiration_checker(db: Database) {
     tokio::spawn(async move {
         let mut check_interval = interval(Duration::from_secs(300)); // 5 phút
@@ -24,11 +23,12 @@ pub fn spawn_ban_expiration_checker(db: Database) {
     });
 }
 
-/// 🔓 Kiểm tra và tự động mở khóa những tài khoản có ban_expires_at < now
+/// Kiểm tra và auto-unban các tài khoản đã hết hạn ban
+/// "Nếu vẫn còn bị ban thì do ăn ở, còn tự hết hạn là do trời thương"
 async fn check_expired_bans(db: &Database) -> Result<(), Box<dyn std::error::Error>> {
     let users_collection = db.collection::<User>("users");
     
-    // Tìm tất cả user bị ban có ban_expires_at không null và < now
+    // Tìm user bị ban với ban_expires_at < now
     let filter = doc! {
         "is_banned": true,
         "ban_expires_at": {
@@ -38,9 +38,9 @@ async fn check_expired_bans(db: &Database) -> Result<(), Box<dyn std::error::Err
     
     let mut cursor = users_collection.find(filter, None).await?;
     
-    let mut unbanned_count = 0;
+    let mut unbanned_count = 0; // Mục tiêu: giảm số người bị ban mà không phải thủ công
     while let Some(user) = cursor.next().await.transpose()? {
-        // Auto-unban user
+        // Auto-unban user (update is_banned=false)
         let filter = doc! {"_id": uuid_to_bson(&user.id)};
         let update = doc! {
             "$set": {
@@ -55,7 +55,7 @@ async fn check_expired_bans(db: &Database) -> Result<(), Box<dyn std::error::Err
                 unbanned_count += 1;
                 tracing::info!("🔓 Auto-unbanned user: {} ({})", user.email, user.id);
                 
-                // Log audit event
+                // Ghi audit event cho auto-unban (để mai còn show với sếp là có hành động)
                 if let Err(e) = log_auto_unban_audit(db, &user.email, &user.id.to_string()).await {
                     tracing::warn!("⚠️ Failed to log auto-unban audit: {}", e);
                 }
@@ -74,7 +74,7 @@ async fn check_expired_bans(db: &Database) -> Result<(), Box<dyn std::error::Err
     Ok(())
 }
 
-/// 📝 Log auto-unban event to audit_logs
+/// Ghi event auto-unban vào audit_logs
 async fn log_auto_unban_audit(
     db: &Database,
     user_email: &str,

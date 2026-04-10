@@ -34,6 +34,10 @@ export interface TuIdea {
   likes: number;
   comments: TuComment[];
   votes?: TuVote[];
+  votes_up?: number;
+  votes_down?: number;
+  comments_count?: number;
+  view_count?: number;
   tags?: string[];
 }
 

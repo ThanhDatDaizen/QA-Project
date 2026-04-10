@@ -68,6 +68,13 @@ const ADMIN_TABS: AdminTab[] = [
     path: '/superadmin/departments',
     description: 'Manage departments',
   },
+  {
+    id: 'academic-years',
+    label: 'Academic Years',
+    icon: '📅',
+    path: '/superadmin/academic-years',
+    description: 'Manage academic years & deadlines',
+  },
 ];
 
 export const SupremeDashboardLayout: React.FC = () => {
@@ -75,6 +82,7 @@ export const SupremeDashboardLayout: React.FC = () => {
   const navigate = useNavigate();
   const location = useLocation();
   const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
 
   useEffect(() => {
     console.log(
@@ -129,10 +137,17 @@ export const SupremeDashboardLayout: React.FC = () => {
           <div style={{ display: 'flex', alignItems: 'center', gap: '24px' }}>
             <button
               onClick={() => setSidebarOpen(!sidebarOpen)}
-              className="text-2xl hover:text-purple-400 transition-colors"
+              className="text-2xl hover:text-purple-400 transition-colors hidden md:inline"
               style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}
             >
               {sidebarOpen ? '☰' : '→'}
+            </button>
+            <button
+              onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+              className="text-2xl hover:text-purple-400 transition-colors md:hidden"
+              style={{ background: 'none', border: 'none', color: 'inherit', cursor: 'pointer' }}
+            >
+              ☰
             </button>
             <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
               <div style={{ fontSize: '18px' }}>ICMS</div>
@@ -163,18 +178,54 @@ export const SupremeDashboardLayout: React.FC = () => {
       {/* ========== MAIN CONTAINER (Sidebar + Dashboard) - FULL WIDTH ========== */}
       <div style={{ flex: 1, display: 'flex', overflow: 'hidden', width: '100vw', boxSizing: 'border-box' }}>
         {/* ========== SIDEBAR - FIXED WIDTH ========== */}
-        <nav
-          style={{
-            background: 'linear-gradient(to bottom, rgba(15, 12, 50, 0.5), rgba(0, 0, 0, 0.5))',
-            borderRight: '1px solid rgba(168, 85, 247, 0.2)',
-            transition: 'all 0.3s',
-            overflowY: 'auto',
-            flexShrink: 0,
-            width: sidebarOpen ? '260px' : '60px',
-            boxSizing: 'border-box',
-            padding: '12px',
-          }}
-        >
+        {/* Mobile overlay nav */}
+        {mobileMenuOpen && (
+          <div className="fixed inset-0 z-50 md:hidden">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setMobileMenuOpen(false)} />
+            <div className="absolute left-0 top-16 z-50 w-64 bg-[rgba(15,12,50,0.95)] border-r border-[rgba(168,85,247,0.2)] h-[calc(100vh-4rem)] p-3">
+              <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                {ADMIN_TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => { handleTabClick(tab.path, tab.label); setMobileMenuOpen(false); }}
+                    style={{
+                      width: '100%',
+                      textAlign: 'left',
+                      padding: '8px 12px',
+                      borderRadius: '4px',
+                      transition: 'all 0.2s',
+                      fontWeight: '500',
+                      display: 'flex',
+                      alignItems: 'center',
+                      gap: '8px',
+                      fontSize: '14px',
+                      border: 'none',
+                      cursor: 'pointer',
+                      background: activeTab === tab.id ? 'linear-gradient(to right, rgb(147, 51, 234), rgb(236, 72, 153))' : 'transparent',
+                      color: activeTab === tab.id ? 'white' : 'rgb(203, 213, 225)',
+                    }}
+                    title={tab.label}
+                  >
+                    <span style={{ flexShrink: 0 }}>{tab.icon}</span>
+                    <span style={{ overflow: 'hidden', textOverflow: 'ellipsis', whiteSpace: 'nowrap' }}>{tab.label}</span>
+                  </button>
+                ))}
+              </div>
+            </div>
+          </div>
+        )}
+
+        {/* Desktop Sidebar Navigation */}
+        <nav className="hidden md:block" style={{
+          background: 'linear-gradient(to bottom, rgba(15, 12, 50, 0.5), rgba(0, 0, 0, 0.5))',
+          borderRight: '1px solid rgba(168, 85, 247, 0.2)',
+          transition: 'all 0.3s',
+          overflowY: 'auto',
+          flexShrink: 0,
+          width: sidebarOpen ? '260px' : '60px',
+          boxSizing: 'border-box',
+          padding: '12px',
+        }}>
           <div style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
             {ADMIN_TABS.map((tab) => (
               <button
@@ -208,30 +259,32 @@ export const SupremeDashboardLayout: React.FC = () => {
         </nav>
 
         {/* ========== DASHBOARD CONTENT AREA - FULL FLEX WIDTH ========== */}
-        <main style={{ flex: 1, overflowY: 'auto', width: 'calc(100vw - ' + (sidebarOpen ? '260px' : '60px') + ')', boxSizing: 'border-box', padding: '20px', paddingBottom: '30vh' }}>
+        <main style={{ flex: 1, overflowY: 'auto', boxSizing: 'border-box', padding: '20px', paddingBottom: '30vh' }}>
           <Outlet />
         </main>
       </div>
 
       {/* ========== TERMINAL - FIXED AT BOTTOM ========== */}
-      <div
-        style={{
-          position: 'fixed',
-          bottom: 0,
-          left: 0,
-          right: 0,
-          width: '100vw',
-          height: '25vh',
-          zIndex: 9999,
-          boxSizing: 'border-box',
-          background: 'rgba(15, 15, 15, 0.75) !important',
-          backdropFilter: 'blur(15px)',
-          WebkitBackdropFilter: 'blur(15px)',
-          borderTop: '1px solid rgba(255, 255, 255, 0.1)',
-          overflow: 'hidden',
-        }}
-      >
-        <TerminalCLI />
+      <div className="hidden md:block">
+        <div
+          style={{
+            position: 'fixed',
+            bottom: 0,
+            left: 0,
+            right: 0,
+            width: '100vw',
+            height: '25vh',
+            zIndex: 9999,
+            boxSizing: 'border-box',
+            background: 'rgba(15, 15, 15, 0.75) !important',
+            backdropFilter: 'blur(15px)',
+            WebkitBackdropFilter: 'blur(15px)',
+            borderTop: '1px solid rgba(255, 255, 255, 0.1)',
+            overflow: 'hidden',
+          }}
+        >
+          <TerminalCLI />
+        </div>
       </div>
     </div>
   );

@@ -1,7 +1,7 @@
 // ============================================================
-// 👑 SIÊU ADMIN HANDLERS - Quản lý hệ thống (Chỉ có Admin)
+// ADMIN HANDLERS - Quản lý hệ thống (chỉ Admin) — quyền mạnh thì trách nhiệm lớn
 // ============================================================
-// Tú cho phép admin những quyền mạnh mẽ nhưng Tú giám sát từng hành động.
+// Admin có quyền mạnh, mọi hành động đều có audit log để khỏi cãi nhau (và để khoe sau này)
 
 use axum::{
     extract::{Path, Query, State},
@@ -27,9 +27,8 @@ fn uuid_to_bson(id: &Uuid) -> mongodb::bson::Binary {
 }
 
 // ============================================================
-// 📝 AUDIT LOGGING - Tú ghi lại tất cả!
+// AUDIT LOGGING - Ghi lại hành động admin để dễ tra cứu (vì mai còn tra)
 // ============================================================
-// Không tin ai cả! Mỗi hành động admin đều được log.
 
 #[derive(Debug, Serialize, Deserialize, Clone)]
 pub struct AuditLog {
@@ -75,7 +74,7 @@ pub async fn log_audit(
 }
 
 // ============================================================
-// 📊 RESPONSE DTOs
+// RESPONSE DTOs (simple wrappers cho admin endpoints) — format trả cho UI
 // ============================================================
 
 #[derive(Debug, Serialize)]
@@ -104,7 +103,7 @@ pub struct SystemStatsResponse {
 }
 
 // ============================================================
-// 🔍 QUERY PARAMETERS
+// QUERY PARAMS (user list / ban requests)
 // ============================================================
 
 #[derive(Debug, Deserialize)]
@@ -127,7 +126,7 @@ pub struct UpdateUserRoleRequest {
 }
 
 // ============================================================
-// 👥 USER MANAGEMENT
+// USER MANAGEMENT (list / ban / role changes)
 // ============================================================
 
 /// GET /admin/users - Danh sách tất cả người dùng
@@ -370,7 +369,7 @@ pub async fn unban_user(
     }))
 }
 
-/// GET /admin/system/stats - Thống kê hệ thống (Tú theo dõi mọi thứ!)
+/// GET /admin/system/stats - Thống kê hệ thống
 pub async fn get_system_stats(
     State(state): State<std::sync::Arc<AppState>>,
 ) -> Result<Json<AdminResponse<SystemStatsResponse>>, Response> {
@@ -405,7 +404,7 @@ pub async fn get_system_stats(
     }))
 }
 
-/// GET /admin/traffic/logs - Audit logs (Tú không quên gì!)
+/// GET /admin/traffic/logs - Audit logs
 pub async fn get_audit_logs(
     State(state): State<std::sync::Arc<AppState>>,
     Query(_params): Query<UserListQuery>,

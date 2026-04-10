@@ -1,7 +1,7 @@
 // ============================================================
-// 🧪 UNIT TESTS - DEADLINE VALIDATION
+// UNIT TESTS - deadline & small helpers (mình viết tests đơn giản)
 // ============================================================
-// Run with: cargo test
+// Run with: cargo test (viết tests lúc đêm khuya, nếu fail thì mai sửa)
 
 #[cfg(test)]
 mod tests {
@@ -13,7 +13,8 @@ mod tests {
     // Mock database for testing
     struct MockDatabase;
 
-    /// Test: Academic Year を過ぎた後、Idea の投稿が失敗すること
+    /// Test: Academic Year closure date validation for idea submission
+    /// Viết lúc 4h sáng — nếu pass thì mừng, nếu fail thì khóc
     #[tokio::test]
     async fn test_cannot_submit_idea_after_closure_date() {
         let now = Utc::now();
@@ -37,6 +38,7 @@ mod tests {
     }
 
     /// Test: Comment submission is blocked after final_closure_date
+    /// Bình luận sau hạn thì thôi nhé
     #[tokio::test]
     async fn test_cannot_submit_comment_after_final_closure_date() {
         let now = Utc::now();
@@ -82,7 +84,7 @@ mod tests {
 
     /// Test: Terms acceptance is required
     #[tokio::test]
-    fn test_terms_acceptance_required() {
+    async fn test_terms_acceptance_required() {
         use crate::models::CreateIdeaRequest;
 
         let valid_request = CreateIdeaRequest {
@@ -92,6 +94,7 @@ mod tests {
             is_anonymous: false,
             terms_accepted: true,
             tags: None,
+            attachments: None,
         };
 
         assert!(valid_request.terms_accepted, "Terms must be accepted");
@@ -103,6 +106,7 @@ mod tests {
             is_anonymous: false,
             terms_accepted: false,
             tags: None,
+            attachments: None,
         };
 
         assert!(!invalid_request.terms_accepted, "Terms acceptance validation");
@@ -182,7 +186,7 @@ mod tests {
 
     /// Test: Department stats calculation
     #[tokio::test]
-    fn test_department_stats_structure() {
+    async fn test_department_stats_structure() {
         use crate::models::DepartmentStats;
 
         let stats = DepartmentStats {
@@ -205,7 +209,7 @@ mod tests {
 
     /// Test: Anonymous idea creator name concealment
     #[tokio::test]
-    fn test_anonymous_idea_creator_concealment() {
+    async fn test_anonymous_idea_creator_concealment() {
         use crate::models::{Idea, IdeaResponse, IdeaStatus};
         use uuid::Uuid;
         use chrono::Utc;
@@ -244,7 +248,7 @@ mod tests {
 
     /// Test: Non-anonymous idea shows real creator
     #[tokio::test]
-    fn test_non_anonymous_idea_shows_creator() {
+    async fn test_non_anonymous_idea_shows_creator() {
         use crate::models::{Idea, IdeaResponse, IdeaStatus};
         use uuid::Uuid;
         use chrono::Utc;

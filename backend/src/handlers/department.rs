@@ -14,10 +14,10 @@ use crate::{
 };
 
 // ============================================================
-// 📋 DEPARTMENT HANDLERS
+// DEPARTMENT HANDLERS - quản lý khoa / phòng (nơi tập hợp mọi drama)
 // ============================================================
 
-/// 📌 Lấy danh sách tất cả Departments
+/// Lấy danh sách departments — trả về list để tui còn biết gửi ai
 pub async fn list_departments(
     State(state): State<Arc<AppState>>,
 ) -> Result<Json<Vec<DepartmentResponse>>, StatusCode> {
@@ -35,7 +35,7 @@ pub async fn list_departments(
     }
 }
 
-/// 📌 Lấy chi tiết 1 Department
+/// Lấy chi tiết department theo id (cẩn thận with UUID)
 pub async fn get_department(
     State(state): State<Arc<AppState>>,
     Path(dept_id): Path<Uuid>,
@@ -49,7 +49,7 @@ pub async fn get_department(
     }
 }
 
-/// 📌 Tạo Department mới (Admin/SuperAdmin only)
+/// Tạo department mới (Admin/SuperAdmin) — hãy chắc chắn tên hợp lệ
 pub async fn create_department(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<CreateDepartmentRequest>,
@@ -72,7 +72,7 @@ pub async fn create_department(
     }
 }
 
-/// 📌 Cập nhật Department
+/// 📌 Cập nhật Department — cập nhật kiểu sinh viên: nhẹ nhàng, nhanh chóng
 pub async fn update_department(
     State(state): State<Arc<AppState>>,
     Path(dept_id): Path<Uuid>,
@@ -80,14 +80,14 @@ pub async fn update_department(
 ) -> Result<Json<DepartmentResponse>, StatusCode> {
     let collection = state.db.collection::<Department>("departments");
     
-    // Lấy department hiện tại
+    // Lấy department hiện tại từ DB
     let existing = collection
         .find_one(doc! { "_id": dept_id.to_string() }, None)
         .await
         .map_err(|_| StatusCode::INTERNAL_SERVER_ERROR)?
         .ok_or(StatusCode::NOT_FOUND)?;
 
-    // Cập nhật các trường có giá trị
+    // Tạo object mới với các trường đã cập nhật
     let updated_dept = Department {
         id: existing.id,
         name: payload.name.unwrap_or(existing.name),
@@ -107,7 +107,7 @@ pub async fn update_department(
     }
 }
 
-/// 📌 Xóa Department (chỉ nếu không có users)
+/// Xóa department (chỉ khi không có user thuộc phòng) — nếu còn user thì thôi
 pub async fn delete_department(
     State(state): State<Arc<AppState>>,
     Path(dept_id): Path<Uuid>,

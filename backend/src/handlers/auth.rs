@@ -18,10 +18,10 @@ use crate::AppState;
 use std::sync::Arc;
 
 // ============================================================
-// 🔧 HELPER FUNCTIONS
+// HELPER FUNCTIONS (xử lý UUID/token/password) - thắp nhang trước khi verify
 // ============================================================
 
-/// Convert UUID to BSON Binary (subtype 0 = generic binary)
+/// Chuyển UUID sang BSON Binary (subtype generic) để query _id
 pub fn uuid_to_bson(id: &Uuid) -> mongodb::bson::Binary {
     mongodb::bson::Binary {
         subtype: BinarySubtype::Generic,
@@ -30,18 +30,18 @@ pub fn uuid_to_bson(id: &Uuid) -> mongodb::bson::Binary {
 }
 
 // ============================================================
-// 🔐 CÁC HÀM XÁC THỰC - HỆ THỐNG CỦA TÚ
+// AUTH HANDLERS - Register / Login / Refresh / Profile (nơi chứa niềm tin và pass hash)
 // ============================================================
 
-/// 📝 Register - Đăng ký tài khoản mới vào hệ thống Tú
-/// Pass sai thì chịu, Tú không rảnh đi reset hộ đâu nha! 😤
+/// Register - Đăng ký user mới (Validate input, hash pass, tạo user, trả token)
+/// Viết vội: nếu trùng email thì thôi đừng cố
 pub async fn register(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<RegisterRequest>,
 ) -> Result<(StatusCode, axum::Json<serde_json::Value>), (StatusCode, Json<serde_json::Value>)> {
     use validator::Validate;
 
-    // Tú kiểm tra input - nếu sai Tú hủy ngay!
+    // Validate input bằng validator crate — nếu fail thì báo cho client
     payload.validate()
         .map_err(|_| {
             (
@@ -54,7 +54,7 @@ pub async fn register(
             )
         })?;
 
-    // Tú check email xem có trùng không
+    // Check email đã tồn tại chưa — nếu tồn tại thì trả conflict
     let existing_user = state.db.collection::<User>("users")
         .find_one(
             mongodb::bson::doc! { "email": &payload.email },
@@ -67,11 +67,11 @@ pub async fn register(
         return Err(conflict_response("Email này đã bị chiếm rồi bạn ơi"));
     }
 
-    // Hash password bằng bcrypt chi phí = 12
+    // Hash password bằng bcrypt (cost=12) — tránh lưu pass raw
     let password_hash = hash(&payload.password, 12)
         .map_err(|_| internal_error_response("Failed to hash password"))?;
 
-    // Tạo user mới (mặc định là Viewer)
+    // Tạo user mới (default role = Viewer) — hy vọng không phải admin luôn
     let new_user = User {
         id: Uuid::new_v4(),
         email: payload.email.clone(),
@@ -88,13 +88,13 @@ pub async fn register(
         profile: None,
     };
 
-    // Lưu vào database
+    // Lưu user vào DB (và mong là insert thành công)
     state.db.collection::<User>("users")
         .insert_one(&new_user, None)
         .await
         .map_err(|_| internal_error_response("Failed to create user"))?;
 
-    // Tạo JWT token
+    // Tạo JWT token trả về client
     let token = generate_jwt_token(&new_user)
         .map_err(|_| internal_error_response("Failed to generate token"))?;
 
@@ -119,14 +119,14 @@ pub async fn register(
     ))
 }
 
-/// 🔓 Login - Bước vào Tầu Tú!
+/// Login - xác thực user và trả token (nếu pass sai thì chửi nhẹ)
 pub async fn login(
     State(state): State<Arc<AppState>>,
     Json(payload): Json<LoginRequest>,
 ) -> Result<axum::Json<serde_json::Value>, (StatusCode, Json<serde_json::Value>)> {
     eprintln!("[LOGIN] Attempting login for email: {}", payload.email);
-    
-    // Tìm user theo email
+
+    // Tìm user theo email — nếu không có, trả unauthorized
     let user = state.db.collection::<User>("users")
         .find_one(
             mongodb::bson::doc! { "email": &payload.email },
@@ -148,7 +148,7 @@ pub async fn login(
             )
         })?;
 
-    // Kiểm tra password
+    // Kiểm tra password (bcrypt verify) — nếu sai thì đuổi về
     let password_valid = verify(&payload.password, &user.password_hash)
         .map_err(|_| internal_error_response("Password verification failed"))?;
 
@@ -163,7 +163,7 @@ pub async fn login(
         ));
     }
 
-    // 🚫 Tú check xem account có "sống" không
+    // Check user active flag — nếu bị disable thì thôi
     if !user.is_active {
         return Err((
             StatusCode::FORBIDDEN,
@@ -175,7 +175,7 @@ pub async fn login(
         ));
     }
 
-    // Cập nhật last_login
+    // Cập nhật last_login (best-effort) — không block flow chính
     let _update_result = state.db.collection::<User>("users")
         .update_one(
             mongodb::bson::doc! { "_id": uuid_to_bson(&user.id) },
@@ -184,7 +184,7 @@ pub async fn login(
         )
         .await;
 
-    // Tạo JWT token
+    // Tạo JWT token mới
     let token = generate_jwt_token(&user)
         .map_err(|_| internal_error_response("Failed to generate token"))?;
 
@@ -208,7 +208,7 @@ pub async fn login(
     })))
 }
 
-/// 🔑 Refresh - Làm mới token (khi token sắp hết hạn)
+/// Refresh token (gia hạn khi token còn gần hết hạn)
 pub async fn refresh_token(
     _state: State<Arc<AppState>>,
     claims: axum::extract::Extension<JwtClaims>,
@@ -243,10 +243,10 @@ pub async fn refresh_token(
 }
 
 // ============================================================
-// 👤 USER PROFILE ENDPOINTS
+// USER PROFILE ENDPOINTS
 // ============================================================
 
-/// 👤 GET /auth/profile - Xem thông tin cá nhân của user (chỉ xem được của user)
+/// GET /auth/profile - Lấy profile của user hiện tại
 pub async fn get_profile(
     State(state): State<Arc<AppState>>,
     Extension(claims): Extension<JwtClaims>,

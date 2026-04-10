@@ -36,21 +36,21 @@ export const useIdeas = (options: UseIdeasOptions = {}) => {
       );
 
       // Build query params
-      let sortBy_param = 'created_at';
+      let sortBy_param = 'recent';
       let sortOrder = 'desc';
       
       if (sort === 'views') {
-        sortBy_param = 'views';
+        sortBy_param = 'most_viewed';
         console.log('%c[TU-CONSOLE] 👀 Sorting by VIEWS', 'color: #ffa500;');
       } else if (sort === 'votes') {
-        sortBy_param = 'vote_count';
+        sortBy_param = 'trending';
         console.log('%c[TU-CONSOLE] 🔼 Sorting by VOTES', 'color: #ffa500;');
       } else {
-        console.log('%c[TU-CONSOLE] 📅 Sorting by NEWEST', 'color: #ffa500;');
+        console.log('%c[TU-CONSOLE] 📅 Sorting by RECENT', 'color: #ffa500;');
       }
 
       const response = await tuApiService.get<PaginatedResponse<TuIdea>>(
-        `/ideas?page=${page}&pageSize=${pageSize}&sortBy=${sortBy_param}&sortOrder=${sortOrder}`
+        `/ideas?page=${page}&records_per_batch=${pageSize}&sort_by=${sortBy_param}&sortOrder=${sortOrder}`
       );
 
       console.log(
@@ -196,7 +196,7 @@ export const useIdeas = (options: UseIdeasOptions = {}) => {
 
       const response = await tuApiService.post<TuIdea>(
         `/ideas/${ideaId}/vote`,
-        { type: voteType }
+        { vote_type: voteType.toLowerCase() }
       );
 
       if (response.success && response.data) {

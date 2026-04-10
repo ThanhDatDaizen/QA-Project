@@ -168,11 +168,11 @@ async function seed() {
         // ============================================================
         console.log('📂 Seeding Categories...');
         const categories = [
-            { _id: uuidv4(), name: 'Process Improvement', description: 'Cải thiện quy trình', is_active: true, created_at: now() },
-            { _id: uuidv4(), name: 'Cost Reduction', description: 'Giảm chi phí', is_active: true, created_at: now() },
-            { _id: uuidv4(), name: 'Innovation', description: 'Sáng kiến mới', is_active: true, created_at: now() },
-            { _id: uuidv4(), name: 'Technology', description: 'Công nghệ', is_active: true, created_at: now() },
-            { _id: uuidv4(), name: 'Training', description: 'Đào tạo', is_active: true, created_at: now() }
+            { _id: uuidv4(), name: 'Process Improvement', description: 'Cải thiện quy trình', is_active: true, created_at: now(), updated_at: now() },
+            { _id: uuidv4(), name: 'Cost Reduction', description: 'Giảm chi phí', is_active: true, created_at: now(), updated_at: now() },
+            { _id: uuidv4(), name: 'Innovation', description: 'Sáng kiến mới', is_active: true, created_at: now(), updated_at: now() },
+            { _id: uuidv4(), name: 'Technology', description: 'Công nghệ', is_active: true, created_at: now(), updated_at: now() },
+            { _id: uuidv4(), name: 'Training', description: 'Đào tạo', is_active: true, created_at: now(), updated_at: now() }
         ];
         await db.collection('categories').insertMany(categories);
         console.log(`✅ Created ${categories.length} categories`);

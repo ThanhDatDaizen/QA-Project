@@ -5,6 +5,7 @@
 
 import React, { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
+import { Share2, MessageCircle } from 'lucide-react';
 import type { TuIdea, VoteType } from '../types';
 import clsx from 'clsx';
 
@@ -28,8 +29,8 @@ export const IdeaCard: React.FC<IdeaCardProps> = ({
   const [isVoting, setIsVoting] = useState(false);
 
   // Tú tính toán vote count
-  const upvotes = idea.votes?.filter(v => v.type === 'Up').length || 0;
-  const downvotes = idea.votes?.filter(v => v.type === 'Down').length || 0;
+  const upvotes = idea.votes_up ?? (idea.votes?.filter(v => v.type === 'Up').length || 0);
+  const downvotes = idea.votes_down ?? (idea.votes?.filter(v => v.type === 'Down').length || 0);
   const netVotes = upvotes - downvotes;
 
   /**
@@ -90,9 +91,10 @@ export const IdeaCard: React.FC<IdeaCardProps> = ({
 
   return (
     <div
+      onClick={() => navigate(`/ideas/${idea.id}`)}
       className={clsx(
         // Base styles
-        'p-6 rounded-lg border-2 transition-all duration-300 cursor-pointer',
+        'p-4 sm:p-6 rounded-lg border-2 transition-all duration-300 cursor-pointer',
         'bg-gradient-to-br from-slate-900 to-slate-800',
         'border-slate-700 hover:border-blue-500',
 
@@ -106,10 +108,11 @@ export const IdeaCard: React.FC<IdeaCardProps> = ({
       )}
     >
       {/* Header với tag ẩn danh */}
-      <div className="flex justify-between items-start mb-3">
+      <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center mb-3">
         <div className="flex-1">
           <h3 
-            onClick={() => {
+            onClick={(e) => {
+              e.stopPropagation();
               console.log(`%c[TU-IDEACARD] 🔗 Navigating to /ideas/${idea.id}`, 'color: #0ea5e9; font-weight: bold;');
               navigate(`/ideas/${idea.id}`);
             }}
@@ -132,7 +135,7 @@ export const IdeaCard: React.FC<IdeaCardProps> = ({
         {/* Delete button (admin only) */}
         {onDelete && (
           <button
-            onClick={handleDelete}
+            onClick={(e) => { e.stopPropagation(); handleDelete(); }}
             disabled={isVoting || isLoading}
             className="text-red-400 hover:text-red-300 hover:bg-red-500/10 p-2 rounded transition-colors"
             title="Delete"
@@ -148,15 +151,15 @@ export const IdeaCard: React.FC<IdeaCardProps> = ({
       </p>
 
       {/* Stats row */}
-      <div className="flex gap-4 text-xs text-slate-400 mb-4 pb-4 border-b border-slate-700">
+      <div className="flex gap-4 flex-wrap text-xs text-slate-400 mb-4 pb-4 border-b border-slate-700">
         <span className="flex items-center gap-1 hover:text-blue-400 transition-colors">
-          👁️ {idea.views} views
+          👁️ {idea.view_count ?? idea.views ?? 0} views
         </span>
         <span className="flex items-center gap-1 hover:text-pink-400 transition-colors">
-          ❤️ {idea.votes?.length || 0} votes
+          ❤️ {(idea.votes_up ?? 0) - (idea.votes_down ?? 0)} votes
         </span>
         <span className="flex items-center gap-1 hover:text-green-400 transition-colors">
-          💬 {idea.comments?.length || 0} comments
+          💬 {idea.comments_count ?? idea.comments?.length ?? 0} comments
         </span>
         <span className="flex items-center gap-1 hover:text-yellow-400 transition-colors ml-auto">
           📅 {new Date(idea.createdAt).toLocaleDateString('en-US')}
@@ -164,14 +167,14 @@ export const IdeaCard: React.FC<IdeaCardProps> = ({
       </div>
 
       {/* Vote buttons */}
-      <div className="flex gap-2 items-center justify-between">
-        <div className="flex gap-2">
+      <div className="flex gap-2 items-center justify-between flex-wrap">
+        <div className="flex gap-2 flex-wrap">
           {/* Upvote button */}
           <button
-            onClick={() => handleVote('Up')}
+            onClick={(e) => { e.stopPropagation(); handleVote('Up'); }}
             disabled={isVoting || isLoading}
             className={clsx(
-              'px-4 py-2 rounded font-semibold transition-all duration-200',
+              'px-3 py-2 sm:px-4 rounded font-semibold transition-all duration-200',
               'flex items-center gap-1 text-sm',
               userVoteType === 'Up'
                 ? 'bg-green-500 text-white shadow-lg shadow-green-500/50'
@@ -186,10 +189,10 @@ export const IdeaCard: React.FC<IdeaCardProps> = ({
 
           {/* Downvote button */}
           <button
-            onClick={() => handleVote('Down')}
+            onClick={(e) => { e.stopPropagation(); handleVote('Down'); }}
             disabled={isVoting || isLoading}
             className={clsx(
-              'px-4 py-2 rounded font-semibold transition-all duration-200',
+              'px-3 py-2 sm:px-4 rounded font-semibold transition-all duration-200',
               'flex items-center gap-1 text-sm',
               userVoteType === 'Down'
                 ? 'bg-red-500 text-white shadow-lg shadow-red-500/50'
@@ -200,6 +203,34 @@ export const IdeaCard: React.FC<IdeaCardProps> = ({
           >
             <span>👎</span>
             <span className="font-bold">{downvotes}</span>
+          </button>
+
+          {/* Comment button */}
+          <button 
+            onClick={(e) => { 
+              e.stopPropagation();
+              navigate(`/ideas/${idea.id}`);
+              setTimeout(() => {
+                try { window.location.hash = '#comments'; } catch (err) { console.warn('Failed to set hash', err); }
+              }, 50);
+            }}
+            className="flex items-center gap-2 px-3 py-2 sm:px-4 bg-slate-700 rounded hover:bg-slate-600 text-slate-300 hover:text-blue-400 transition-colors"
+          >
+            <MessageCircle size={18} />
+            <span>Comment</span>
+          </button>
+          
+          {/* Share button */}
+          <button 
+            onClick={(e) => {
+              e.stopPropagation();
+              navigator.clipboard.writeText(window.location.origin + `/ideas/${idea.id}`);
+              alert('Link copied to clipboard!');
+            }}
+            className="flex items-center gap-2 px-3 py-2 sm:px-4 bg-slate-700 rounded hover:bg-slate-600 text-slate-300 hover:text-green-400 transition-colors"
+          >
+            <Share2 size={18} />
+            <span>Share</span>
           </button>
         </div>
 

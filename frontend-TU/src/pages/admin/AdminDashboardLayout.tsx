@@ -3,7 +3,7 @@
 // Admin access (power 18) - Full idea & user management
 // ===================================================
 
-import React, { useEffect } from 'react';
+import React, { useEffect, useState } from 'react';
 import { Navigate, useNavigate, useLocation, Outlet } from 'react-router-dom';
 import { useTuIdentity } from '../../context/TuIdentityContext';
 import clsx from 'clsx';
@@ -21,12 +21,14 @@ const ADMIN_TABS: AdminTab[] = [
   { id: 'ideas', label: 'Idea Management', icon: '💡', path: '/admin/ideas' },
   { id: 'access', label: 'Access Control', icon: '🔐', path: '/admin/access' },
   { id: 'logs', label: 'System Logs', icon: '📝', path: '/admin/logs' },
+  { id: 'academic-years', label: 'Academic Years', icon: '📅', path: '/admin/academic-years' },
 ];
 
 export const AdminDashboardLayout: React.FC = () => {
   const { isAuthenticated, user } = useTuIdentity();
   const navigate = useNavigate();
   const location = useLocation();
+  const [mobileOpen, setMobileOpen] = useState(false);
 
   useEffect(() => {
     console.log(
@@ -62,8 +64,9 @@ export const AdminDashboardLayout: React.FC = () => {
     <div className="min-h-screen bg-gradient-to-br from-slate-900 via-purple-900 to-slate-900">
       {/* Header */}
       <header className="bg-slate-800/80 backdrop-blur-sm border-b border-slate-700/50 sticky top-0 z-40">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-7xl mx-auto px-4 sm:px-6 py-4 flex items-center justify-between">
           <div className="flex items-center space-x-3">
+            <button onClick={() => setMobileOpen(!mobileOpen)} className="md:hidden px-2 py-1 bg-slate-700 rounded text-white">☰</button>
             <div className="text-2xl">🛠️</div>
             <div>
               <h1 className="text-xl font-bold text-white">Admin Control Panel</h1>
@@ -89,10 +92,42 @@ export const AdminDashboardLayout: React.FC = () => {
         </div>
       </header>
 
-      <div className="flex">
-        {/* Sidebar Navigation */}
-        <nav className="w-64 bg-slate-800/50 border-r border-slate-700/50 min-h-screen sticky top-16">
-          <div className="p-4 space-y-2">
+      <div className="flex relative">
+        {/* Mobile overlay nav */}
+        {mobileOpen && (
+          <div className="fixed inset-0 z-40 md:hidden">
+            <div className="absolute inset-0 bg-black/40" onClick={() => setMobileOpen(false)} />
+            <nav className="absolute left-0 top-16 z-50 w-64 bg-slate-800/95 border-r border-slate-700/50 h-[calc(100vh-4rem)] p-4">
+              <div className="flex justify-end">
+                <button onClick={() => setMobileOpen(false)} className="mb-2 px-2 py-1 rounded bg-slate-700 text-white">Close</button>
+              </div>
+              <div className="space-y-2">
+                {ADMIN_TABS.map((tab) => (
+                  <button
+                    key={tab.id}
+                    onClick={() => {
+                      navigate(tab.path);
+                      setMobileOpen(false);
+                    }}
+                    className={clsx(
+                      'w-full text-left px-4 py-3 rounded-lg transition-all duration-200 font-medium flex items-center space-x-3',
+                      activeTab === tab.id
+                        ? 'bg-blue-600 text-white shadow-lg'
+                        : 'text-slate-300 hover:bg-slate-700/50 hover:text-white'
+                    )}
+                  >
+                    <span className="text-xl">{tab.icon}</span>
+                    <span>{tab.label}</span>
+                  </button>
+                ))}
+              </div>
+            </nav>
+          </div>
+        )}
+
+        {/* Desktop Sidebar Navigation */}
+        <nav className="hidden md:block md:w-64 bg-slate-800/50 border-r border-slate-700/50 md:min-h-screen md:sticky md:top-16 p-4">
+          <div className="space-y-2">
             {ADMIN_TABS.map((tab) => (
               <button
                 key={tab.id}
@@ -112,8 +147,8 @@ export const AdminDashboardLayout: React.FC = () => {
         </nav>
 
         {/* Main Content */}
-        <main className="flex-1 overflow-auto">
-          <div className="p-6">
+        <main className="flex-1 overflow-auto md:ml-64">
+          <div className="p-4 md:p-6">
             <Outlet />
           </div>
         </main>

@@ -56,13 +56,27 @@ export interface Category {
   created_at: string;
 }
 
+export interface AcademicYear {
+  id: string;
+  name: string;
+  start_date: string;
+  end_date: string;
+  closure_date: string;
+  final_closure_date: string;
+  is_active: boolean;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface Comment {
-  _id: string;
+  _id: string; // The backend actually returns `id`, let's check
+  id: string;
   idea_id: string;
   author_id: string;
   author_name: string;
   content: string;
   created_at: string;
+  likes: number;
 }
 
 export interface SystemLog {
@@ -150,19 +164,43 @@ export const ideasAPI = {
   /**
    * POST /ideas/:id/vote - Vote cho idea
    */
-  vote: async (ideaId: string, voteValue: 1 | -1) => {
-    console.log(`[TU-IDEAS-API] POST /ideas/${ideaId}/vote`);
+  vote: async (ideaId: string, voteValue: 1 | -1 | 'up' | 'down') => {
+    console.log(`[TU-IDEAS-API] POST /ideas/${ideaId}/vote = ${voteValue}`);
+    // Server expects {"vote_type": "up" | "down"}
+    let finalVoteType = voteValue;
+    if (voteValue === 1 || voteValue === 'up') finalVoteType = 'up';
+    if (voteValue === -1 || voteValue === 'down') finalVoteType = 'down';
+
     return tuApiService.post<{ message: string; votes_count: number }>(`/ideas/${ideaId}/vote`, {
-      vote: voteValue,
+      vote_type: finalVoteType,
     });
   },
 
   /**
    * POST /ideas/:id/comments - Bình luận trên idea
    */
-  addComment: async (ideaId: string, content: string) => {
-    console.log(`[TU-IDEAS-API] POST /ideas/${ideaId}/comments`);
-    return tuApiService.post<Comment>(`/ideas/${ideaId}/comments`, { content });
+  addComment: async (ideaId: string, content: string, isAnonymous: boolean = false) => {
+    console.log(`[TU-IDEAS-API] POST /ideas/${ideaId}/comments (Anonymous: ${isAnonymous})`);
+    return tuApiService.post<Comment>(`/ideas/${ideaId}/comments`, { 
+      content,
+      is_anonymous: isAnonymous
+    });
+  },
+
+  /**
+   * GET /ideas/:id/comments
+   */
+  getComments: async (ideaId: string) => {
+    console.log(`[TU-IDEAS-API] GET /ideas/${ideaId}/comments`);
+    return tuApiService.get<Comment[]>(`/ideas/${ideaId}/comments`);
+  },
+
+  /**
+   * POST /ideas/:id/comments/:commentId/like
+   */
+  likeComment: async (ideaId: string, commentId: string) => {
+    console.log(`[TU-IDEAS-API] POST /ideas/${ideaId}/comments/${commentId}/like`);
+    return tuApiService.post<Comment>(`/ideas/${ideaId}/comments/${commentId}/like`, {});
   },
 };
 
@@ -307,6 +345,32 @@ export const categoriesAPI = {
   delete: async (categoryId: string) => {
     console.log(`[TU-CATEGORIES-API] DELETE /categories/${categoryId}`);
     return tuApiService.delete<{ message: string }>(`/categories/${categoryId}`);
+  },
+};
+
+// ============================================
+// ACADEMIC YEARS API
+// ============================================
+
+export const academicAPI = {
+  list: async () => {
+    console.log('[TU-ACADEMIC-API] GET /academic-years');
+    return tuApiService.get<AcademicYear[]>('/academic-years');
+  },
+
+  getDetail: async (yearId: string) => {
+    console.log(`[TU-ACADEMIC-API] GET /academic-years/${yearId}`);
+    return tuApiService.get<AcademicYear>(`/academic-years/${yearId}`);
+  },
+
+  update: async (yearId: string, data: Partial<AcademicYear>) => {
+    console.log(`[TU-ACADEMIC-API] PUT /academic-years/${yearId}`, data);
+    return tuApiService.put<AcademicYear>(`/academic-years/${yearId}`, data);
+  },
+
+  activate: async (yearId: string) => {
+    console.log(`[TU-ACADEMIC-API] POST /academic-years/${yearId}/activate`);
+    return tuApiService.post<AcademicYear>(`/academic-years/${yearId}/activate`);
   },
 };
 

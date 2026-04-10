@@ -16,6 +16,11 @@ interface IdeaListProps {
   onVote?: (ideaId: string, type: VoteType) => void;
   onDelete?: (ideaId: string) => void;
   pageSize?: number;
+  serverCurrentPage?: number;
+  serverTotalPages?: number;
+  serverSortType?: string;
+  onPageChange?: (page: number) => void;
+  onSortChange?: (sort: 'newest' | 'views' | 'votes') => void;
 }
 
 export const IdeaList: React.FC<IdeaListProps> = ({
@@ -24,14 +29,40 @@ export const IdeaList: React.FC<IdeaListProps> = ({
   onVote,
   onDelete,
   pageSize = 5,
+  serverCurrentPage,
+  serverTotalPages,
+  serverSortType,
+  onPageChange,
+  onSortChange,
 }) => {
-  const [currentPage, setCurrentPage] = useState(1);
-  const [sortType, setSortType] = useState<SortType>('newest');
+  const [localCurrentPage, setLocalCurrentPage] = useState(1);
+  const [localSortType, setLocalSortType] = useState<SortType>('newest');
 
-  // Reset page khi ideas thay đổi
+  // Use server props if provided, fallback to local state
+  const currentPage = serverCurrentPage ?? localCurrentPage;
+  const sortType = (serverSortType as SortType) ?? localSortType;
+
+  const handlePageChange = (page: number) => {
+    if (onPageChange) {
+      onPageChange(page);
+    } else {
+      setLocalCurrentPage(page);
+    }
+  };
+
+  const handleSortChange = (sort: SortType) => {
+    if (onSortChange) {
+      onSortChange(sort);
+    } else {
+      setLocalSortType(sort);
+      setLocalCurrentPage(1);
+    }
+  };
+
+  // Reset page khi ideas thay đổi (only for local mode)
   useEffect(() => {
-    setCurrentPage(1);
-  }, [ideas]);
+    if (!onPageChange) setLocalCurrentPage(1);
+  }, [ideas, onPageChange]);
 
   /**
    * sortedIdeas - Sắp xếp ideas dựa trên sortType
@@ -48,12 +79,12 @@ export const IdeaList: React.FC<IdeaListProps> = ({
         );
         break;
       case 'views':
-        sorted.sort((a, b) => (b.views || 0) - (a.views || 0));
+        sorted.sort((a, b) => (b.view_count ?? b.views ?? 0) - (a.view_count ?? a.views ?? 0));
         break;
       case 'votes':
         sorted.sort(
           (a, b) =>
-            (b.votes?.length || 0) - (a.votes?.length || 0)
+            ((b.votes_up ?? 0) - (b.votes_down ?? 0)) - ((a.votes_up ?? 0) - (a.votes_down ?? 0))
         );
         break;
       default:
@@ -65,10 +96,10 @@ export const IdeaList: React.FC<IdeaListProps> = ({
 
   /**
    * paginatedIdeas - Phân trang
-   * Mỗi page hiển thị pageSize ideas
    */
-  const totalPages = Math.ceil(sortedIdeas.length / pageSize);
-  const paginatedIdeas = sortedIdeas.slice(
+  const isServerSide = serverTotalPages !== undefined;
+  const totalPages = isServerSide ? serverTotalPages : Math.ceil(sortedIdeas.length / pageSize);
+  const paginatedIdeas = isServerSide ? sortedIdeas : sortedIdeas.slice(
     (currentPage - 1) * pageSize,
     currentPage * pageSize
   );
@@ -97,10 +128,7 @@ export const IdeaList: React.FC<IdeaListProps> = ({
           {(['newest', 'views', 'votes'] as const).map((type) => (
             <button
               key={type}
-              onClick={() => {
-                setSortType(type);
-                setCurrentPage(1);
-              }}
+              onClick={() => handleSortChange(type)}
               className={clsx(
                 'px-3 py-1 text-sm rounded font-semibold transition-all duration-200',
                 sortType === type
@@ -116,12 +144,14 @@ export const IdeaList: React.FC<IdeaListProps> = ({
         </div>
 
         <div className="text-sm text-slate-400">
-          Showing {paginatedIdeas.length} of {sortedIdeas.length} ideas
+          {isServerSide 
+            ? `Page ${currentPage} of ${totalPages}` 
+            : `Showing ${paginatedIdeas.length} of ${sortedIdeas.length} ideas`}
         </div>
       </div>
 
       {/* Ideas Grid */}
-      <div className="grid gap-4">
+      <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-4">
         {isLoading ? (
           // Loading skeleton
           Array.from({ length: pageSize }).map((_, i) => (
@@ -158,7 +188,7 @@ export const IdeaList: React.FC<IdeaListProps> = ({
         <div className="flex justify-center items-center gap-2 bg-slate-800 p-4 rounded-lg border border-slate-700">
           {/* Previous button */}
           <button
-            onClick={() => setCurrentPage(Math.max(1, currentPage - 1))}
+            onClick={() => handlePageChange(Math.max(1, currentPage - 1))}
             disabled={currentPage === 1}
             className={clsx(
               'px-3 py-2 rounded font-semibold transition-all duration-200',
@@ -191,7 +221,7 @@ export const IdeaList: React.FC<IdeaListProps> = ({
               return (
                 <button
                   key={page}
-                  onClick={() => setCurrentPage(page)}
+                  onClick={() => handlePageChange(page)}
                   className={clsx(
                     'w-10 h-10 rounded font-semibold transition-all duration-200',
                     page === currentPage
@@ -207,7 +237,7 @@ export const IdeaList: React.FC<IdeaListProps> = ({
 
           {/* Next button */}
           <button
-            onClick={() => setCurrentPage(Math.min(totalPages, currentPage + 1))}
+            onClick={() => handlePageChange(Math.min(totalPages, currentPage + 1))}
             disabled={currentPage === totalPages}
             className={clsx(
               'px-3 py-2 rounded font-semibold transition-all duration-200',

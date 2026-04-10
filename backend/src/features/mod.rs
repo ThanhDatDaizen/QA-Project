@@ -1,18 +1,12 @@
 /**
- * ICMS Features Module
- * 
- * Feature-based architecture for cleaner code organization
- * Each feature represents a distinct business domain:
- * 
- * - submissions: Core idea/submission management
- * - identity: User profile & authentication  
- * - admin: System administration & analytics
- * - scoring: Voting & assessment system
+ * Features module - gom các domain riêng cho rõ ràng
+ * Viết nhanh: chia nhỏ để khỏi đọc code lúc 4h sáng
  */
 
+// Modules (hàng về, xịn xò hoặc tạm)
 pub mod submissions;
 
-// Re-export main handlers for convenience
+// Re-export main handlers for convenience (để tui import nhanh)
 pub use submissions::{
     propose_staff_initiative,
     retrieve_submission_detail,

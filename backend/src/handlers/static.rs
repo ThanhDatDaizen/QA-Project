@@ -1,7 +1,6 @@
-/// Static File Serving Module (React dist / SPA)
-///
-/// Nhúng toàn bộ React dist files vào binary Rust bằng rust-embed.
-/// Cung cấp fallback logic để React Router hoạt động (SPA pattern).
+/// Static file serving (React dist / SPA)
+/// Nhúng React dist bằng `rust-embed` và fallback cho React Router
+/// Viết kiểu sinh viên: nếu frontend mất tích thì chịu
 
 use rust_embed::RustEmbed;
 use axum::{
@@ -12,44 +11,26 @@ use axum::{
 use std::path::PathBuf;
 
 // ============================================================
-// ASSET DEFINITION - Nhúng React dist files vào binary
+// ASSET DEFINITION - Nhúng React dist vào binary (rust-embed)
 // ============================================================
 
-/// Tất cả file tĩnh từ thư mục `frontend-TU/dist`
-/// 
-/// Lưu ý: 
-/// - For Docker: path là `frontend-TU/dist` (build context = root)
-/// - For Local: path là `../frontend-TU/dist` (relative to backend/Cargo.toml)
+/// Nhúng file từ `frontend-TU/dist`
+/// Lưu ý path khác nhau khi chạy local vs docker — thắp nhang cho index.html
 #[derive(RustEmbed)]
 #[folder = "../frontend-TU/dist"]
 #[prefix = ""]
 pub struct Asset;
 
 // ============================================================
-// STATIC FILE HANDLER - Phục vụ file với React fallback
+// STATIC FILE HANDLER - serve files + SPA fallback
 // ============================================================
 
-/// Handler chính để phục vụ file tĩnh với fallback logic
-///
-/// Workflow:
-/// 1. User yêu cầu file (VD: GET /index.html, GET /assets/main.js)
-/// 2. Kiểm tra file trong Asset:
-///    - Nếu tìm thấy → trả về file với MIME type đúng
-///    - Nếu không tìm thấy và là SPA route → trả về index.html
-///    - Nếu không tìm thấy và là /api/* → trả về 404
-///
-/// React Router Fallback:
-/// Khi user vào route như /dashboard, /ideas/123, v.v.:
-/// - Browser gọi GET /dashboard
-/// - Rust không tìm thấy file dashboard.html
-/// - Rust trả về index.html (root của SPA)
-/// - React hydrates + React Router xử lý routing phía client
+/// Serve static files; nếu không tìm thấy và không phải /api/* thì trả về index.html
+/// (React Router fallback) — client sẽ xử lý route, nếu mất index thì khóc
 pub async fn serve_static_file(
     axum::extract::Path(path): axum::extract::Path<String>,
 ) -> Response {
-    // Normalize path (xoá leading slash)
-    // "/index.html" → "index.html"
-    // "/assets/main.js" → "assets/main.js"
+    // Normalize path (bỏ leading slash)
     let asset_path = if path.starts_with('/') {
         &path[1..]
     } else {
@@ -59,7 +40,7 @@ pub async fn serve_static_file(
     // Cố gắng lấy file từ embedded assets
     match Asset::get(asset_path) {
         Some(file) => {
-            // ✅ File tồn tại
+            // ✅ File tồn tại, trả về với MIME phù hợp
             let mime = mime_guess::from_path(asset_path)
                 .first_or_octet_stream()
                 .as_ref()
@@ -70,23 +51,21 @@ pub async fn serve_static_file(
             (StatusCode::OK, [("content-type", &mime)], file.data.into_response()).into_response()
         }
         None => {
-            // ❌ File không tìm thấy - logic fallback
+            // ❌ File không tìm thấy — xử lý fallback
 
-            // Nếu là request đến /api/* → 404 (không phải SPA route)
+            // Nếu request đến /api/* thì trả 404 (không fallback) — API không phải SPA
             if asset_path.starts_with("api/") {
                 tracing::debug!("🚫 API route not found: /{}", asset_path);
                 return (StatusCode::NOT_FOUND, "API endpoint not found").into_response();
             }
 
-            // Nếu là request file tĩnh (có extension) → 404
+            // Nếu request có extension (static file) → 404
             if has_file_extension(asset_path) {
                 tracing::debug!("🚫 Static file not found: /{}", asset_path);
                 return (StatusCode::NOT_FOUND, format!("File not found: {}", asset_path)).into_response();
             }
 
-            // ✅ React Router Fallback
-            // Đây là SPA route (không có file extension)
-            // Trả về index.html để React Router xử lý
+            // React Router fallback: trả index.html cho các SPA routes (hy vọng client render ổn)
             match Asset::get("index.html") {
                 Some(index) => {
                     tracing::debug!("🔄 SPA fallback: {} → index.html", asset_path);
@@ -110,10 +89,7 @@ pub async fn serve_static_file(
 // UTILITY FUNCTIONS
 // ============================================================
 
-/// Kiểm tra xem path có phải file tĩnh (có extension) không
-///
-/// Trả về true nếu có extension (.js, .css, .png, etc.)
-/// Trả về false nếu không (ví dụ: SPA route /dashboard)
+/// Kiểm tra xem path có extension hay không (xác định static file)
 fn has_file_extension(path: &str) -> bool {
     // Lấy phần extension (sau dấu . cuối cùng)
     path.split('/')
