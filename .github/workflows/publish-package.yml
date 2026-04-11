@@ -1,36 +1,29 @@
-name: Create and publish a Docker image
+# Bước 1: Build mã nguồn
+FROM rust:1.75-slim as builder
 
-on:
-  push:
-    branches: ['main']
+# Cài đặt các thư viện hệ thống cần thiết để build
+RUN apt-get update && apt-get install -y pkg-config libssl-dev && rm -rf /var/lib/apt/lists/*
 
-env:
-  REGISTRY: ghcr.io
-  # Tú sửa dòng này thành viết thường hoàn toàn
-  IMAGE_NAME: thanhdatdaizen/qa-project-backend 
+WORKDIR /usr/src/app
+COPY . .
 
-jobs:
-  build-and-push-image:
-    runs-on: ubuntu-latest
-    permissions:
-      contents: read
-      packages: write
+# Build bản release
+RUN cargo build --release
 
-    steps:
-      - name: Checkout repository
-        uses: actions/checkout@v4
+# Bước 2: Tạo image chạy (siêu nhẹ)
+FROM debian:bookworm-slim
 
-      - name: Log in to the Container registry
-        uses: docker/login-action@v3
-        with:
-          registry: ${{ env.REGISTRY }}
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+# Cài đặt OpenSSL vì các backend thường cần nó để kết nối DB/Network
+RUN apt-get update && apt-get install -y ca-certificates libssl3 && rm -rf /var/lib/apt/lists/*
 
-      - name: Build and push Docker image
-        uses: docker/build-push-action@v5
-        with:
-          context: .
-          push: true
-          # Chỗ này sẽ tự động ghép thành ghcr.io/thanhdatdaizen/qa-project-backend:latest
-          tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
+WORKDIR /app
+
+# COPY file thực thi từ bước builder sang
+# LƯU Ý: Thay 'qa-project-backend' bằng tên trong file Cargo.toml của Tú
+COPY --from=builder /usr/src/app/target/release/qa-project-backend .
+
+# Mở port (thường là 8080 hoặc 3000 tùy code của Tú)
+EXPOSE 8080
+
+# Chạy ứng dụng
+CMD ["./qa-project-backend"]
