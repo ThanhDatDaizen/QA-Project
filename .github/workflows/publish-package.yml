@@ -2,11 +2,12 @@ name: Create and publish a Docker image
 
 on:
   push:
-    branches: ['main'] 
+    branches: ['main']
 
 env:
   REGISTRY: ghcr.io
-  IMAGE_NAME: ${{ github.repository }}-backend
+  # Tú sửa dòng này thành viết thường hoàn toàn
+  IMAGE_NAME: thanhdatdaizen/qa-project-backend 
 
 jobs:
   build-and-push-image:
@@ -31,4 +32,5 @@ jobs:
         with:
           context: .
           push: true
+          # Chỗ này sẽ tự động ghép thành ghcr.io/thanhdatdaizen/qa-project-backend:latest
           tags: ${{ env.REGISTRY }}/${{ env.IMAGE_NAME }}:latest
